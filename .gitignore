@@ -1,2 +1,5 @@
+# Environment files
 .env
-.vscode
+
+# VSCode settings
+.vscode/

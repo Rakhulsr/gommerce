@@ -3,7 +3,6 @@ package configs
 import (
 	"fmt"
 
-	"github.com/Rakhulsr/go-ecommerce/app/models/migrations"
 	_ "github.com/go-sql-driver/mysql"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
@@ -26,12 +25,6 @@ func OpenConnection() (*gorm.DB, error) {
 	}
 
 	fmt.Println("DB is successfully connect")
-
-	if err := migrations.AutoMigrate(db); err != nil {
-		return nil, fmt.Errorf("Failed To migrate models: %v", err)
-	} else {
-		fmt.Println("Successfully migrate models")
-	}
 
 	return db, nil
 
