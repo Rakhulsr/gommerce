@@ -23,6 +23,8 @@ func main() {
 
 	}
 
+	http.Handle("/css/", http.StripPrefix("/css/", http.FileServer(http.Dir("assets/css"))))
+
 	router := routes.NewRouter(db)
 
 	server := http.Server{

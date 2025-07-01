@@ -1,10 +1,20 @@
 package handlers
 
 import (
-	"fmt"
 	"net/http"
+
+	"github.com/unrolled/render"
 )
 
 func Home(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "Hello Welcome to Toko Bulan")
+	render := render.New(render.Options{
+		Layout:     "layout",
+		Extensions: []string{".html"},
+	})
+
+	_ = render.HTML(w, http.StatusOK, "home", map[string]interface{}{
+		"title": "Home title",
+		"body":  "Home Description",
+	})
+
 }
