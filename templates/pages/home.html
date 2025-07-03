@@ -1,31 +1,29 @@
 {{ define "home" }}
 
-<!-- Kategori + Slider -->
 <section class="bg-white py-12">
   <div class="max-w-7xl mx-auto px-4 flex flex-col md:flex-row gap-8">
     
-    <!-- Sidebar Kategori -->
     <div class="w-full md:w-1/4">
       <h2 class="text-xl font-semibold mb-4 text-gray-800 border-b pb-2">Kategori</h2>
       <ul class="space-y-2 text-gray-700">
-        <li><a href="#" class="block px-4 py-2 rounded-md hover:bg-green-100 transition">Pakan Hewan</a></li>
-        <li><a href="#" class="block px-4 py-2 rounded-md hover:bg-green-100 transition">Ternak</a></li>
-        <li><a href="#" class="block px-4 py-2 rounded-md hover:bg-green-100 transition">Perlengkapan Memancing</a></li>
-        <li><a href="#" class="block px-4 py-2 rounded-md hover:bg-green-100 transition">Aksesoris</a></li>
-        <li><a href="#" class="block px-4 py-2 rounded-md hover:bg-green-100 transition">Obat & Vitamin</a></li>
+        {{ range .categories }}
+        <li>
+          <a href="/products?category={{ .Slug }}" class="block px-4 py-2 rounded-md hover:bg-green-100 transition">
+            {{ .Name }}
+          </a>
+        </li>
+        {{ end }}
       </ul>
     </div>
 
-    <!-- Slider -->
     <div class="w-full md:w-3/4">
       <div id="slider" class="relative rounded-xl overflow-hidden shadow-lg h-64">
         <div class="slides relative w-full h-full">
-          <img src="/images/farm.jpg" alt="Banner 1" class="absolute inset-0 w-full h-full object-cover opacity-0 transition-opacity duration-1000" />
-          <img src="/images/pet.jpg" alt="Banner 2" class="absolute inset-0 w-full h-full object-cover opacity-0 transition-opacity duration-1000" />
-          <img src="/images/fishin.jpg" alt="Banner 3" class="absolute inset-0 w-full h-full object-cover opacity-0 transition-opacity duration-1000" />
+          <img src="/images/slider/farm.jpg" alt="Banner 1" class="absolute inset-0 w-full h-full object-cover opacity-0 transition-opacity duration-1000" />
+          <img src="/images/slider/pet.jpg" alt="Banner 2" class="absolute inset-0 w-full h-full object-cover opacity-0 transition-opacity duration-1000" />
+          <img src="/images/slider/fishin.jpg" alt="Banner 3" class="absolute inset-0 w-full h-full object-cover opacity-0 transition-opacity duration-1000" />
         </div>
 
-        <!-- Slider Dots -->
         <div class="absolute bottom-3 left-1/2 transform -translate-x-1/2 flex space-x-2 z-10">
           <button class="w-3 h-3 bg-white rounded-full opacity-50 hover:opacity-100" onclick="showSlide(0)"></button>
           <button class="w-3 h-3 bg-white rounded-full opacity-50 hover:opacity-100" onclick="showSlide(1)"></button>
@@ -37,25 +35,30 @@
   </div>
 </section>
 
+<div class="border-t border-gray-300 my-1"></div>
 
-<!-- Produk Unggulan -->
 <section class="py-16 bg-gray-50 border-t">
   <div class="max-w-7xl mx-auto px-4">
     <h2 class="text-2xl font-bold text-gray-800 mb-8 text-center">Produk Unggulan</h2>
-     
-    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
-      <!-- Contoh Produk -->
+
+   <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
+      {{ range .featured }}
       <div class="bg-white border rounded-xl overflow-hidden shadow-sm hover:shadow-md transition">
-        <a href="./product-detail.html">
-          <img src="/images/sample-product.png" alt="Produk 1" class="h-48 w-full object-cover" />
+        <a href="/products/{{ .Slug }}" class="block">
+          {{ if gt (len .ProductImages) 0 }}
+          <img src="{{ (index .ProductImages 0).Small }}" alt="{{ .Name }}" class="h-48 w-full object-cover" />
+          {{ else }}
+          <img src="/images/product/ss.jpg" alt="Tidak ada gambar" class="h-48 w-full object-cover" />
+          {{ end }}
           <div class="p-4">
-            <h4 class="text-base font-semibold text-gray-700">Pakan Kucing Premium</h4>
-            <p class="text-green-600 font-bold mt-2">Rp 120.000</p>
+            <h4 class="text-base font-semibold text-gray-700">{{ .Name }}</h4>
+            <p class="text-green-600 font-bold mt-2">Rp {{ .Price }}</p>
           </div>
         </a>
       </div>
-      <!-- Tambahkan lebih banyak produk nanti -->
-    </div>
+      {{ end }}
+</div>
+
 
     <div class="mt-10 flex justify-center">
       <a href="/products" class="text-sm md:text-base px-6 py-3 bg-gray-200 text-black rounded-md hover:bg-gray-400 transition">

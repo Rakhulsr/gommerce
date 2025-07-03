@@ -20,7 +20,7 @@ type ENV struct {
 func LoadEnv() ENV {
 	cwd, err := os.Getwd()
 	if err != nil {
-		log.Fatalf("Failed to get current DIR", err)
+		log.Fatalf("Failed to get current DIR : %v", err)
 	}
 
 	fmt.Printf("Current DIR is : %s\n", cwd)

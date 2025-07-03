@@ -5,97 +5,120 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Toko Bulan</title>
     <link rel="stylesheet" href="/css/style.css" />
+    <script src="https://kit.fontawesome.com/01ac0c14b1.js" crossorigin="anonymous"></script>
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        height: auto;
+        scroll-behavior: smooth;
+      }
+    </style>
   </head>
   <body class="bg-white text-gray-900">
 
-<header class="bg-white shadow">
-  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-    <div class="flex justify-between h-16 items-center">
-    
-      <div class="flex-shrink-0">
-        <a href="/" class="text-2xl font-bold text-green-700">
-          <i class="fa-solid fa-moon"></i>Toko Bulan</a>
-      </div>
+    <header class="bg-white sticky top-0 z-50">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex justify-between h-16 items-center">
 
-      <div class="flex-1 mx-6 hidden md:block">
-        <div class="relative">
-          <input type="text" placeholder="Cari produk..." class="w-full border border-gray-300 rounded-full py-2 pl-10 pr-4 focus:outline-none focus:ring-2 focus:ring-green-500" />
-          <div class="absolute right-3 top-2.5 text-gray-400">
-            🔍
+          <div class="flex-shrink-0">
+            <a href="/" class="text-2xl font-bold text-green-700 flex items-center gap-2">
+              <i class="fa-solid fa-moon"></i>
+              <span>Toko Bulan</span>
+            </a>
+          </div>
+
+      
+          <div class="flex-1 mx-6 hidden md:block">
+            <form action="/products" method="GET" class="relative">
+              <input
+                type="text"
+                name="q"
+                value="{{ .query }}"
+                placeholder="Cari produk..."
+                class="w-full border border-gray-300 rounded-full py-2 pl-10 pr-4 focus:outline-none focus:ring-2 focus:ring-green-500"
+              />
+              <button type="submit" class="absolute right-3 top-2.5 text-gray-400">
+                🔍
+              </button>
+            </form>
+          </div>
+
+
+       
+          <div class="flex space-x-4 items-center">
+            <a href="/cart" class="text-gray-600 hover:text-green-600">
+              <i class="fa-solid fa-cart-shopping"></i>
+            </a>
+            <div class="h-6 w-px bg-gray-300 mx-2"></div>
+            <a href="/login" class="text-black hover:bg-green-200 px-4 py-2 rounded-md text-sm font-medium border border-green-600">Masuk</a>
+            <a href="/register" class="text-white bg-green-600 hover:bg-green-700 px-4 py-2 rounded-md text-sm font-medium">Daftar</a>
+          </div>
+
+        </div>
+      </div>
+    <div class="border-t border-gray-300 my-3"></div>
+
+    </header>
+    
+    <main class="max-w-6xl mx-auto px-4 pt-6 pb-12">
+
+    {{ yield }}
+
+    </main>
+
+
+    <footer class="bg-gray-900 text-gray-300 pt-12 pb-8 mt-16">
+      <div class="max-w-7xl mx-auto px-4 grid grid-cols-1 md:grid-cols-4 gap-8">
+     
+        <div>
+          <h2 class="text-2xl font-bold text-white mb-4">Gommerce</h2>
+          <p class="text-sm leading-relaxed">
+            Toko terpercaya untuk kebutuhan hewan peliharaan, ternak, dan perlengkapan memancing Anda. Belanja mudah & cepat di Gommerce.
+          </p>
+        </div>
+  
+        <div>
+          <h3 class="text-lg font-semibold text-white mb-4">Navigasi</h3>
+          <ul class="space-y-2 text-sm">
+            <li><a href="/" class="hover:text-white">Beranda</a></li>
+            <li><a href="/products" class="hover:text-white">Produk</a></li>
+            <li><a href="/login" class="hover:text-white">Masuk</a></li>
+            <li><a href="/register" class="hover:text-white">Daftar</a></li>
+          </ul>
+        </div>
+     
+        <div>
+          <h3 class="text-lg font-semibold text-white mb-4">Bantuan</h3>
+          <ul class="space-y-2 text-sm">
+            <li><a href="#" class="hover:text-white">FAQ</a></li>
+            <li><a href="#" class="hover:text-white">Cara Belanja</a></li>
+            <li><a href="#" class="hover:text-white">Pengembalian</a></li>
+            <li><a href="#" class="hover:text-white">Hubungi Kami</a></li>
+          </ul>
+        </div>
+      
+        <div>
+          <h3 class="text-lg font-semibold text-white mb-4">Hubungi Kami</h3>
+          <p class="text-sm">Email: support@gommerce.com</p>
+          <p class="text-sm mb-4">Telepon: +62 812-3456-7890</p>
+          <div class="flex space-x-4 mt-4">
+            <a href="#" class="hover:text-white"><i class="fab fa-facebook-f"></i></a>
+            <a href="#" class="hover:text-white"><i class="fab fa-instagram"></i></a>
+            <a href="#" class="hover:text-white"><i class="fab fa-twitter"></i></a>
+            <a href="#" class="hover:text-white"><i class="fab fa-whatsapp"></i></a>
           </div>
         </div>
       </div>
 
-      
-      <div class="flex space-x-4 items-center">
-        <a href="./cart.html" class="text-gray-600 hover:text-green-600">
-          <i class="fa-solid fa-cart-shopping"></i>
-        </a>
-        <div class="h-6 w-px bg-gray-300 mx-2"></div>
-        <a href="./login.html" class="text-black hover:bg-green-200 px-4 py-2 rounded-md text-sm font-medium  border border-green-600">Masuk</a>
-        <a href="./register.html" class="text-white bg-green-600 hover:bg-green-700 px-4 py-2 rounded-md text-sm font-medium">Daftar</a>
+      <div class="mt-12 border-t border-gray-700 pt-6 text-center text-sm text-gray-500">
+        &copy; 2025 Gommerce. All rights reserved.
       </div>
-    </div>
-  </div>
-</header>
+    </footer>
 
-    {{ yield }}
-    <script src="https://kit.fontawesome.com/01ac0c14b1.js" crossorigin="anonymous"></script>
     <script src="/js/slider.js"></script>
+    <script src="/js/detailProduct.js"></script>
 
-    <footer class="bg-gray-900 text-gray-300 pt-12 pb-8 mt-16">
-  <div class="max-w-7xl mx-auto px-4 grid grid-cols-1 md:grid-cols-4 gap-8">
-
-    <!-- Logo & Deskripsi -->
-    <div>
-      <h2 class="text-2xl font-bold text-white mb-4">Gommerce</h2>
-      <p class="text-sm leading-relaxed">
-        Toko terpercaya untuk kebutuhan hewan peliharaan, ternak, dan perlengkapan memancing Anda. Belanja mudah & cepat di Gommerce.
-      </p>
-    </div>
-
-    <!-- Navigasi -->
-    <div>
-      <h3 class="text-lg font-semibold text-white mb-4">Navigasi</h3>
-      <ul class="space-y-2 text-sm">
-        <li><a href="/" class="hover:text-white">Beranda</a></li>
-        <li><a href="/products" class="hover:text-white">Produk</a></li>
-        <li><a href="/login" class="hover:text-white">Masuk</a></li>
-        <li><a href="/register" class="hover:text-white">Daftar</a></li>
-      </ul>
-    </div>
-
-    <!-- Bantuan -->
-    <div>
-      <h3 class="text-lg font-semibold text-white mb-4">Bantuan</h3>
-      <ul class="space-y-2 text-sm">
-        <li><a href="#" class="hover:text-white">FAQ</a></li>
-        <li><a href="#" class="hover:text-white">Cara Belanja</a></li>
-        <li><a href="#" class="hover:text-white">Pengembalian</a></li>
-        <li><a href="#" class="hover:text-white">Hubungi Kami</a></li>
-      </ul>
-    </div>
-
-    <!-- Sosial & Kontak -->
-    <div>
-      <h3 class="text-lg font-semibold text-white mb-4">Hubungi Kami</h3>
-      <p class="text-sm">Email: support@gommerce.com</p>
-      <p class="text-sm mb-4">Telepon: +62 812-3456-7890</p>
-
-      <div class="flex space-x-4 mt-4">
-        <a href="#" class="hover:text-white"><i class="fab fa-facebook-f"></i></a>
-        <a href="#" class="hover:text-white"><i class="fab fa-instagram"></i></a>
-        <a href="#" class="hover:text-white"><i class="fab fa-twitter"></i></a>
-        <a href="#" class="hover:text-white"><i class="fab fa-whatsapp"></i></a>
-      </div>
-    </div>
-  </div>
-
-  <!-- Copyright -->
-  <div class="mt-12 border-t border-gray-700 pt-6 text-center text-sm text-gray-500">
-    &copy; 2025 Gommerce. All rights reserved.
-  </div>
-</footer>
 
   </body>
 </html>

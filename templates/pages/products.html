@@ -1,0 +1,89 @@
+{{ define "products" }}
+
+<section class="max-w-7xl mx-auto px-4 py-12">
+  <div class="flex flex-col md:flex-row gap-6">
+   
+    <aside class="w-full md:w-1/4">
+      <h2 class="text-xl font-semibold text-gray-800 mb-4">Kategori</h2>
+      <ul class="space-y-2">
+        {{ range .categories }}
+        <li>
+          <a href="/products?category={{ .Slug }}"
+             class="block px-4 py-2 bg-gray-100 hover:bg-green-100 rounded text-gray-700 {{ if eq $.category .Slug }}bg-green-200 font-bold{{ end }}">
+            {{ .Name }}
+          </a>
+        </li>
+        {{ end }}
+      </ul>
+    </aside>
+
+    <div class="w-full md:w-3/4">
+      <h1 class="text-3xl font-bold text-gray-800 mb-6 text-center md:text-left">
+        {{ if .searchQuery }}
+          Hasil Pencarian: "{{ .searchQuery }}"
+        {{ else }}
+          {{ .title }}
+        {{ end }}
+      </h1>
+
+
+      
+
+      {{ if .products }}
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        {{ range .products }}
+        <div class="bg-white rounded-lg border border-gray-200 shadow hover:shadow-md transition">
+          <a href="/products/{{ .Slug }}">
+            <img
+              src="{{ if gt (len .ProductImages) 0 }}{{ (index .ProductImages 0).Small }}{{ else }}/assets/img/product/ss.jpg{{ end }}"
+              alt="{{ .Name }}"
+              class="w-full h-48 object-cover rounded-t-lg"
+            />
+            <div class="p-4">
+              <h2 class="text-md font-semibold text-gray-900 truncate">{{ .Name }}</h2>
+              <p class="text-green-600 font-bold mt-1">Rp {{ .Price }}</p>
+            </div>
+          </a>
+        </div>
+        {{ end }}
+      </div>
+
+      
+      {{ if gt .totalPages 1 }}
+      <div class="mt-10 flex justify-center items-center space-x-2">
+        {{ $current := .current }}
+        {{ $total := .totalPages }}
+
+        {{ $start := max 1 (sub $current 4) }}
+        {{ $end := min $total (add $start 9) }}
+
+        {{ if gt $start 1 }}
+          <a href="/products?page=1{{ if .category }}&category={{ .category }}{{ end }}{{ if .query }}&q={{ .query }}{{ end }}" class="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300">1</a>
+          <span class="px-2">...</span>
+        {{ end }}
+
+        {{ range $i := until (add (sub $end $start) 1) }}
+          {{ $pageNum := add $start $i }}
+          <a href="/products?page={{ $pageNum }}{{ if $.category }}&category={{ $.category }}{{ end }}{{ if $.query }}&q={{ $.query }}{{ end }}"
+             class="px-3 py-1 rounded {{ if eq $pageNum $.current }}bg-green-600 text-white{{ else }}bg-gray-200 hover:bg-gray-300{{ end }}">
+            {{ $pageNum }}
+          </a>
+        {{ end }}
+
+        {{ if lt $end $total }}
+          <span class="px-2">...</span>
+          <a href="/products?page={{ $total }}{{ if .category }}&category={{ .category }}{{ end }}{{ if .query }}&q={{ .query }}{{ end }}" class="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300">{{ $total }}</a>
+        {{ end }}
+      </div>
+      {{ end }} <!-- END pagination -->
+
+      {{ else }}
+      <!-- TIDAK ADA PRODUK -->
+      <div class="text-center mt-8 text-gray-500 text-sm">Tidak ada produk yang tersedia.</div>
+      {{ end }} <!-- END .products -->
+
+    </div>
+  </div>
+</section>
+
+{{ end }}

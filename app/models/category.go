@@ -9,7 +9,8 @@ type Category struct {
 	SectionID string    `gorm:"size:36;index"`
 	Products  []Product `gorm:"many2many:product_categories"`
 	Name      string    `gorm:"size:100"`
-	Slug      string    `gorm:"size:100"`
+	Slug      string    `gorm:"size:100;uniqueIndex"`
+
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
