@@ -1,12 +1,14 @@
 package repositories
 
 import (
+	"context"
+
 	"github.com/Rakhulsr/go-ecommerce/app/models"
 	"gorm.io/gorm"
 )
 
 type CategoryRepository interface {
-	GetAll() ([]models.Category, error)
+	GetAll(ctx context.Context) ([]models.Category, error)
 }
 
 type categoryRepo struct {
@@ -17,7 +19,7 @@ func NewCategoryRepository(db *gorm.DB) CategoryRepository {
 	return &categoryRepo{db}
 }
 
-func (c *categoryRepo) GetAll() ([]models.Category, error) {
+func (c *categoryRepo) GetAll(ctx context.Context) ([]models.Category, error) {
 	var categories []models.Category
 
 	err := c.db.

@@ -16,18 +16,23 @@ func NewRouter(db *gorm.DB) *mux.Router {
 
 	productRepo := repositories.NewProductRepository(db)
 	categoryRepo := repositories.NewCategoryRepository(db)
-	productHandler := handlers.NewProductHandler(productRepo, categoryRepo, render)
+	cartRepo := repositories.NewCartRepository(db)
+	cartItemRepo := repositories.NewCartItemRepository(db)
 
+	productHandler := handlers.NewProductHandler(productRepo, categoryRepo, render)
 	homeHandler := handlers.NewHomeHandler(render, categoryRepo, productRepo)
 
 	router.HandleFunc("/", homeHandler.Home).Methods("GET")
 	router.HandleFunc("/products", productHandler.Products).Methods("GET")
 	router.HandleFunc("/products/{slug}", productHandler.ProductDetail).Methods("GET")
 
+	cartHandler := handlers.NewCartHandler(productRepo, cartRepo, *render, cartItemRepo)
+
+	router.HandleFunc("/carts", cartHandler.GetCart).Methods("GET")
+	router.HandleFunc("/carts/add", cartHandler.AddItemCart).Methods("POST")
+
 	router.PathPrefix("/css/").Handler(http.StripPrefix("/css/", http.FileServer(http.Dir("assets/css"))))
-
 	router.PathPrefix("/js/").Handler(http.StripPrefix("/js/", http.FileServer(http.Dir("assets/js"))))
-
 	router.PathPrefix("/images/").Handler(http.StripPrefix("/images/", http.FileServer(http.Dir("assets/images"))))
 
 	return router

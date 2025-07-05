@@ -22,7 +22,8 @@ type Product struct {
 	Description      string          `gorm:"type:text"`
 	Status           int             `gorm:"default:0"`
 	ProductImages    []ProductImage
-	Categories       []Category `gorm:"many2many:product_categories"`
+	Categories       []Category      `gorm:"many2many:product_categories"`
+	DiscountPercent  decimal.Decimal `gorm:"decimal(10,2);default:0"`
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
 	DeletedAt        gorm.DeletedAt

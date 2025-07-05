@@ -1,6 +1,7 @@
 package repositories
 
 import (
+	"context"
 	"strings"
 
 	"github.com/Rakhulsr/go-ecommerce/app/models"
@@ -8,13 +9,14 @@ import (
 )
 
 type ProductRepository interface {
-	GetProducts() ([]models.Product, error)
-	GetByCategorySlug(slug string) ([]models.Product, error)
-	GetPaginated(limit, offset int) ([]models.Product, int64, error)
-	GetByCategorySlugPaginated(slug string, limit, offset int) ([]models.Product, int64, error)
-	GetBySlug(slug string) (*models.Product, error)
-	GetFeaturedProducts(limit int) ([]models.Product, error)
-	SearchProductsPaginated(keyword string, limit, offset int) ([]models.Product, int64, error)
+	GetProducts(ctx context.Context) ([]models.Product, error)
+	GetByCategorySlug(ctx context.Context, slug string) ([]models.Product, error)
+	GetPaginated(ctx context.Context, limit, offset int) ([]models.Product, int64, error)
+	GetByCategorySlugPaginated(ctx context.Context, slug string, limit, offset int) ([]models.Product, int64, error)
+	GetBySlug(ctx context.Context, slug string) (*models.Product, error)
+	GetFeaturedProducts(ctx context.Context, limit int) ([]models.Product, error)
+	SearchProductsPaginated(ctx context.Context, keyword string, limit, offset int) ([]models.Product, int64, error)
+	GetByID(ctx context.Context, id string) (*models.Product, error)
 }
 
 type productRepository struct {
@@ -25,29 +27,43 @@ func NewProductRepository(db *gorm.DB) ProductRepository {
 	return &productRepository{db}
 }
 
-func (p *productRepository) GetProducts() ([]models.Product, error) {
-
+func (p *productRepository) GetProducts(ctx context.Context) ([]models.Product, error) {
 	var products []models.Product
-
-	if err := p.db.Debug().Model(&models.Product{}).Limit(20).Find(&products).Error; err != nil {
+	if err := p.db.WithContext(ctx).Model(&models.Product{}).Limit(20).Find(&products).Error; err != nil {
 		return nil, err
 	}
 	return products, nil
 }
 
-func (p *productRepository) GetBySlug(slug string) (*models.Product, error) {
+func (p *productRepository) GetByID(ctx context.Context, id string) (*models.Product, error) {
 	var product models.Product
-
-	if err := p.db.Debug().Model(&models.Product{}).Preload("Categories").Preload("ProductImages").Where("slug = ?", slug).First(&product).Error; err != nil {
+	if err := p.db.WithContext(ctx).
+		Model(&models.Product{}).
+		Preload("Categories").
+		Preload("ProductImages").
+		Where("id = ?", id).
+		First(&product).Error; err != nil {
 		return nil, err
 	}
-
 	return &product, nil
 }
 
-func (p *productRepository) GetByCategorySlug(slug string) ([]models.Product, error) {
+func (p *productRepository) GetBySlug(ctx context.Context, slug string) (*models.Product, error) {
+	var product models.Product
+	if err := p.db.WithContext(ctx).
+		Model(&models.Product{}).
+		Preload("Categories").
+		Preload("ProductImages").
+		Where("slug = ?", slug).
+		First(&product).Error; err != nil {
+		return nil, err
+	}
+	return &product, nil
+}
+
+func (p *productRepository) GetByCategorySlug(ctx context.Context, slug string) ([]models.Product, error) {
 	var products []models.Product
-	err := p.db.
+	err := p.db.WithContext(ctx).
 		Joins("JOIN product_categories pc ON pc.product_id = products.id").
 		Joins("JOIN categories c ON c.id = pc.category_id").
 		Where("c.slug = ?", slug).
@@ -56,15 +72,15 @@ func (p *productRepository) GetByCategorySlug(slug string) ([]models.Product, er
 	return products, err
 }
 
-func (r *productRepository) GetPaginated(limit, offset int) ([]models.Product, int64, error) {
+func (p *productRepository) GetPaginated(ctx context.Context, limit, offset int) ([]models.Product, int64, error) {
 	var products []models.Product
 	var total int64
 
-	if err := r.db.Model(&models.Product{}).Count(&total).Error; err != nil {
+	if err := p.db.WithContext(ctx).Model(&models.Product{}).Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
 
-	err := r.db.
+	err := p.db.WithContext(ctx).
 		Preload("Categories").
 		Preload("ProductImages").
 		Order("created_at DESC").
@@ -75,22 +91,21 @@ func (r *productRepository) GetPaginated(limit, offset int) ([]models.Product, i
 	return products, total, err
 }
 
-func (r *productRepository) GetByCategorySlugPaginated(slug string, limit, offset int) ([]models.Product, int64, error) {
+func (p *productRepository) GetByCategorySlugPaginated(ctx context.Context, slug string, limit, offset int) ([]models.Product, int64, error) {
 	var products []models.Product
 	var total int64
 
-	err := r.db.
+	err := p.db.WithContext(ctx).
 		Joins("JOIN product_categories pc ON pc.product_id = products.id").
 		Joins("JOIN categories c ON c.id = pc.category_id").
 		Where("c.slug = ?", slug).
 		Model(&models.Product{}).
 		Count(&total).Error
-
 	if err != nil {
 		return nil, 0, err
 	}
 
-	err = r.db.
+	err = p.db.WithContext(ctx).
 		Joins("JOIN product_categories pc ON pc.product_id = products.id").
 		Joins("JOIN categories c ON c.id = pc.category_id").
 		Where("c.slug = ?", slug).
@@ -104,35 +119,33 @@ func (r *productRepository) GetByCategorySlugPaginated(slug string, limit, offse
 	return products, total, err
 }
 
-func (r *productRepository) GetFeaturedProducts(limit int) ([]models.Product, error) {
+func (p *productRepository) GetFeaturedProducts(ctx context.Context, limit int) ([]models.Product, error) {
 	var products []models.Product
-
-	err := r.db.
+	err := p.db.WithContext(ctx).
 		Preload("ProductImages").
 		Preload("Categories").
 		Order("created_at DESC").
 		Limit(limit).
 		Find(&products).Error
-
 	return products, err
 }
 
-func (r *productRepository) SearchProductsPaginated(keyword string, limit, offset int) ([]models.Product, int64, error) {
+func (p *productRepository) SearchProductsPaginated(ctx context.Context, keyword string, limit, offset int) ([]models.Product, int64, error) {
 	var products []models.Product
 	var total int64
+	searchKeyword := "%" + strings.ToLower(keyword) + "%"
 
-	searchKeyword := "%" + keyword + "%"
-
-	if err := r.db.Model(&models.Product{}).
-		Where("LOWER(name) LIKE ? OR LOWER(short_description) LIKE ?", strings.ToLower(searchKeyword), strings.ToLower(searchKeyword)).
+	if err := p.db.WithContext(ctx).
+		Model(&models.Product{}).
+		Where("LOWER(name) LIKE ? OR LOWER(short_description) LIKE ?", searchKeyword, searchKeyword).
 		Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
 
-	err := r.db.
+	err := p.db.WithContext(ctx).
 		Preload("ProductImages").
 		Preload("Categories").
-		Where("LOWER(name) LIKE ? OR LOWER(short_description) LIKE ?", strings.ToLower(searchKeyword), strings.ToLower(searchKeyword)).
+		Where("LOWER(name) LIKE ? OR LOWER(short_description) LIKE ?", searchKeyword, searchKeyword).
 		Order("created_at DESC").
 		Limit(limit).
 		Offset(offset).

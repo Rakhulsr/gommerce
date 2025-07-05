@@ -50,6 +50,13 @@ func ProductFaker(db *gorm.DB, category *models.Category) *models.Product {
 		}
 	}
 
+	var discountPercent decimal.Decimal
+	if rand.Intn(2) == 0 {
+		discountPercent = decimal.NewFromInt(0)
+	} else {
+		discountPercent = decimal.NewFromInt(10)
+	}
+
 	product := &models.Product{
 		ID:               productID,
 		UserID:           user.ID,
@@ -63,6 +70,7 @@ func ProductFaker(db *gorm.DB, category *models.Category) *models.Product {
 		Description:      faker.Paragraph(),
 		Status:           1,
 		Categories:       []models.Category{*category},
+		DiscountPercent:  discountPercent,
 		ProductImages:    productImages,
 		CreatedAt:        time.Now(),
 		UpdatedAt:        time.Now(),
@@ -72,7 +80,12 @@ func ProductFaker(db *gorm.DB, category *models.Category) *models.Product {
 }
 
 func fakePrice() float64 {
-	return precision(rand.Float64()*math.Pow10(rand.Intn(8)), rand.Intn(2)+1)
+
+	min := 10000.0
+	max := 5000000.0
+
+	price := min + rand.Float64()*(max-min)
+	return precision(price, 2)
 }
 
 func precision(val float64, pre int) float64 {

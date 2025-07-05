@@ -61,7 +61,7 @@
       {{ end }}
 
     
-      <form action="/cart/add" method="POST" class="mt-6 w-full max-w-sm">
+      <form action="/carts/add" method="POST" class="mt-6 w-full max-w-sm">
         <input type="hidden" name="product_id" value="{{ .product.ID }}" />
 
         <p id="productPrice" data-value="{{ .product.Price }}" class="hidden"></p>
@@ -78,8 +78,8 @@
 
             <input
               type="number"
-              id="quantity"
-              name="quantity"
+              id="qty"
+              name="qty"
               value="1"
               min="1"
               class="w-10 text-center border-none outline-none text-sm bg-transparent"
@@ -117,9 +117,6 @@
           Beli
         </button>
       </form>
-
-
-
 
     </div>
   </div>

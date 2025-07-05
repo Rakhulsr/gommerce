@@ -40,11 +40,11 @@ func (h *ProductHandler) Products(w http.ResponseWriter, r *http.Request) {
 
 	switch {
 	case query != "":
-		products, total, err = h.repo.SearchProductsPaginated(query, limit, offset)
+		products, total, err = h.repo.SearchProductsPaginated(r.Context(), query, limit, offset)
 	case slug != "":
-		products, total, err = h.repo.GetByCategorySlugPaginated(slug, limit, offset)
+		products, total, err = h.repo.GetByCategorySlugPaginated(r.Context(), slug, limit, offset)
 	default:
-		products, total, err = h.repo.GetPaginated(limit, offset)
+		products, total, err = h.repo.GetPaginated(r.Context(), limit, offset)
 	}
 
 	if err != nil {
@@ -52,7 +52,7 @@ func (h *ProductHandler) Products(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	categories, err := h.categoryRepo.GetAll()
+	categories, err := h.categoryRepo.GetAll(r.Context())
 	if err != nil {
 		http.Error(w, "Gagal mengambil kategori", http.StatusInternalServerError)
 		return
@@ -77,7 +77,7 @@ func (h *ProductHandler) ProductDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	product, err := h.repo.GetBySlug(vars["slug"])
+	product, err := h.repo.GetBySlug(r.Context(), vars["slug"])
 	if err != nil {
 		http.Error(w, "Gagal mengambil data produk", http.StatusInternalServerError)
 		return

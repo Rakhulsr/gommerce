@@ -6,6 +6,8 @@
     <title>Toko Bulan</title>
     <link rel="stylesheet" href="/css/style.css" />
     <script src="https://kit.fontawesome.com/01ac0c14b1.js" crossorigin="anonymous"></script>
+   
+
     <style>
       html, body {
         margin: 0;
@@ -16,7 +18,8 @@
     </style>
   </head>
   <body class="bg-white text-gray-900">
-
+     <script src="/js/index.js"></script>
+   
     <header class="bg-white sticky top-0 z-50">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="flex justify-between h-16 items-center">
@@ -47,7 +50,7 @@
 
        
           <div class="flex space-x-4 items-center">
-            <a href="/cart" class="text-gray-600 hover:text-green-600">
+            <a href="/carts" class="text-gray-600 hover:text-green-600">
               <i class="fa-solid fa-cart-shopping"></i>
             </a>
             <div class="h-6 w-px bg-gray-300 mx-2"></div>
@@ -61,7 +64,7 @@
 
     </header>
     
-    <main class="max-w-6xl mx-auto px-4 pt-6 pb-12">
+    <main class="max-w-6xl mx-auto px-4 pt-6 pb-12" id="product-page">
 
     {{ yield }}
 
@@ -116,9 +119,7 @@
       </div>
     </footer>
 
-    <script src="/js/slider.js"></script>
-    <script src="/js/detailProduct.js"></script>
-
+   
 
   </body>
 </html>
