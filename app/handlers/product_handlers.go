@@ -4,8 +4,10 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/Rakhulsr/go-ecommerce/app/helpers"
 	"github.com/Rakhulsr/go-ecommerce/app/models"
 	"github.com/Rakhulsr/go-ecommerce/app/repositories"
+	"github.com/Rakhulsr/go-ecommerce/app/utils/breadcrumb"
 	"github.com/gorilla/mux"
 	"github.com/unrolled/render"
 )
@@ -37,6 +39,12 @@ func (h *ProductHandler) Products(w http.ResponseWriter, r *http.Request) {
 		err      error
 		total    int64
 	)
+	breadcrumbs := []breadcrumb.Breadcrumb{
+		{Name: "Home", URL: "/"},
+		{Name: "Produk", URL: "/products"},
+	}
+
+	var currentCategory models.Category
 
 	switch {
 	case query != "":
@@ -58,7 +66,7 @@ func (h *ProductHandler) Products(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_ = h.render.HTML(w, http.StatusOK, "products", map[string]interface{}{
+	dataMap := helpers.GetBaseData(r, map[string]interface{}{
 		"title":       "Produk Kami",
 		"products":    products,
 		"categories":  categories,
@@ -66,26 +74,64 @@ func (h *ProductHandler) Products(w http.ResponseWriter, r *http.Request) {
 		"totalPages":  int((total + int64(limit) - 1) / int64(limit)),
 		"category":    slug,
 		"searchQuery": query,
+		"breadcrumbs": breadcrumbs,
 	})
+
+	if currentCategory.ID != "" {
+		dataMap["currentCategory"] = currentCategory
+	}
+
+	datas := helpers.GetBaseData(r, dataMap)
+
+	_ = h.render.HTML(w, http.StatusOK, "products", datas)
+
 }
 
 func (h *ProductHandler) ProductDetail(w http.ResponseWriter, r *http.Request) {
-
 	vars := mux.Vars(r)
+	productSlug := vars["slug"]
 
-	if vars["slug"] == "" {
+	if productSlug == "" {
+		http.NotFound(w, r)
 		return
 	}
 
-	product, err := h.repo.GetBySlug(r.Context(), vars["slug"])
+	product, err := h.repo.GetBySlug(r.Context(), productSlug)
 	if err != nil {
 		http.Error(w, "Gagal mengambil data produk", http.StatusInternalServerError)
 		return
 	}
 
-	_ = h.render.HTML(w, http.StatusOK, "product", map[string]interface{}{
-		"title":   product.Name,
-		"product": product,
-	})
+	breadcrumbs := []breadcrumb.Breadcrumb{
+		{Name: "Home", URL: "/"},
+		{Name: "Produk", URL: "/products"},
+	}
 
+	if len(product.Categories) > 0 {
+		mainCategory := product.Categories[0]
+		breadcrumbs = append(breadcrumbs, breadcrumb.Breadcrumb{
+			Name: mainCategory.Name,
+			URL:  "/products?category=" + mainCategory.Slug,
+		})
+	}
+
+	breadcrumbs = append(breadcrumbs, breadcrumb.Breadcrumb{Name: product.Name, URL: "/products/" + product.Slug})
+
+	priceFloat, _ := product.Price.Float64()
+
+	status := r.URL.Query().Get("status")
+	message := r.URL.Query().Get("message")
+
+	dataMap := map[string]interface{}{
+		"title":         product.Name,
+		"product":       product,
+		"price":         priceFloat,
+		"breadcrumbs":   breadcrumbs,
+		"MessageStatus": status,
+		"Message":       message,
+	}
+
+	datas := helpers.GetBaseData(r, dataMap)
+
+	_ = h.render.HTML(w, http.StatusOK, "product", datas)
 }

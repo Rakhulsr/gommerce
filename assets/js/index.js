@@ -1,7 +1,9 @@
 document.addEventListener("DOMContentLoaded", function () {
-  // =============================
-  // DETAIL PRODUK SECTION
-  // =============================
+  
+  console.log("✅ JS Loaded!");
+  // ==========================
+  // PRODUK PAGE SECTION (dibungkus pengecekan)
+  // ==========================
   const productPage = document.getElementById("product-page");
 
   if (productPage) {
@@ -51,35 +53,39 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   }
 
-  // =============================
+  // ==========================
   // SLIDER SECTION
-  // =============================
- 
-const slider = document.querySelector("#slider");
-if (slider) {
-  const slides = slider.querySelectorAll(".slides img");
-  let currentSlide = 0;
+  // ==========================
+  const slider = document.querySelector("#slider");
+  if (slider) {
+    const slides = slider.querySelectorAll(".slides img");
+    let currentSlide = 0;
 
-  function showSlide(index) {
-    slides.forEach((slide, i) => {
-      slide.classList.toggle("opacity-100", i === index);
-      slide.classList.toggle("opacity-0", i !== index);
-    });
-    currentSlide = index;
+    function showSlide(index) {
+      slides.forEach((slide, i) => {
+        slide.classList.toggle("opacity-100", i === index);
+        slide.classList.toggle("opacity-0", i !== index);
+      });
+      currentSlide = index;
+    }
+
+    function nextSlide() {
+      const nextIndex = (currentSlide + 1) % slides.length;
+      showSlide(nextIndex);
+    }
+
+    if (slides.length > 0) {
+      window.showSlide = showSlide;
+      showSlide(currentSlide);
+      setInterval(nextSlide, 5000);
+    }
   }
 
-  function nextSlide() {
-    const nextIndex = (currentSlide + 1) % slides.length;
-    showSlide(nextIndex);
-  }
+});
 
-  if (slides.length > 0) {
-  
-    window.showSlide = showSlide;
-
-    showSlide(currentSlide);
-    setInterval(nextSlide, 5000);
-  }
-}
-
+window.addEventListener('load', function() {
+    const preloader = document.getElementById('preloader');
+    if (preloader) {
+    preloader.classList.add('hidden');
+    }
 });

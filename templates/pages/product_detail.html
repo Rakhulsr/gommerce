@@ -3,14 +3,16 @@
 <section class="pb-6">
 
   <div class="mb-6 mt-2">
-    <a href="javascript:history.back()" class="inline-flex items-center gap-1 text-green-600 hover:text-green-700 text-sm underline transition">
+    <!-- <a href="/products" class="inline-flex items-center gap-1 text-green-600 hover:text-green-700 text-sm underline transition">
       <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
       </svg>
       Kembali
-    </a>
+    </a> -->
 
 </div>
+  
+
   <div class="flex flex-col lg:flex-row gap-10">
     <div class="lg:w-1/2">
       {{ if gt (len .product.ProductImages) 0 }}
@@ -40,7 +42,7 @@
       <h1 class="text-3xl font-bold text-gray-800 mb-2">{{ .product.Name }}</h1>
 
       <div class="flex items-center gap-4 mb-4">
-        <p class="text-green-600 text-2xl font-bold">Rp {{ .product.Price }}</p>
+        <p class="text-green-600 text-2xl font-bold">{{ rupiah .product.Price }}</p>
         
         <span class="text-sm text-gray-500">Berat: {{ .product.Weight }} kg</span>
       </div>
@@ -61,7 +63,7 @@
       {{ end }}
 
     
-      <form action="/carts/add" method="POST" class="mt-6 w-full max-w-sm">
+      <form action="/carts/add" method="POST" class="mt-6 w-full max-w-sm" id="cartForm">
         <input type="hidden" name="product_id" value="{{ .product.ID }}" />
 
         <p id="productPrice" data-value="{{ .product.Price }}" class="hidden"></p>
@@ -100,22 +102,40 @@
 
         <div class="mb-4">
           <p class="text-sm text-gray-500">Subtotal</p>
-          <p id="subtotal" class="text-xl font-bold text-black">Rp{{ .product.Price }}</p>
+          <p id="subtotal" class="text-xl font-bold text-black">{{ rupiah .product.Price }}</p>
         </div>
 
-        <button
-          type="submit"
-          class="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 rounded mb-2 transition"
-        >
-          + Keranjang
-        </button>
+       <input type="hidden" name="action" id="actionInput" value="">
 
-        <button
-          type="button"
-          class="w-full border border-green-600 text-green-700 hover:bg-green-50 font-semibold py-3 rounded transition"
-        >
-          Beli
-        </button>
+        <!-- Tombol + Keranjang -->
+      <button
+        type="submit"
+        onclick="setAction('cart')"
+        class="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white font-semibold py-3 rounded-lg shadow transition"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
+          viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-1.3 5.6a1 1 0 001 1.4h12.6a1 1 0 001-1.4L17 13M9 21a1 1 0 100-2 1 1 0 000 2zm8 0a1 1 0 100-2 1 1 0 000 2z"/>
+        </svg>
+        + Keranjang
+      </button>
+
+     
+      <button
+        type="submit"
+        onclick="setAction('buy')"
+        class="w-full flex items-center justify-center gap-2 border border-green-600 text-green-700 hover:bg-green-50 font-semibold py-3 rounded-lg transition mt-3"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
+          viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M12 8c1.104 0 2-.672 2-1.5S13.104 5 12 5s-2 .672-2 1.5S10.896 8 12 8zm0 0v4m0 4h.01"/>
+        </svg>
+        Beli Sekarang
+      </button>
+
+
       </form>
 
     </div>

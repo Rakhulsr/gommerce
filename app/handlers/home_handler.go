@@ -3,7 +3,9 @@ package handlers
 import (
 	"net/http"
 
+	"github.com/Rakhulsr/go-ecommerce/app/helpers"
 	"github.com/Rakhulsr/go-ecommerce/app/repositories"
+	"github.com/Rakhulsr/go-ecommerce/app/utils/breadcrumb"
 	"github.com/unrolled/render"
 )
 
@@ -34,12 +36,19 @@ func (h *HomeHandler) Home(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_ = h.render.HTML(w, http.StatusOK, "home", map[string]interface{}{
-		"title":      "Beranda",
-		"categories": categories,
-		"category":   "",
-		"current":    1,
-		"totalPages": 1,
-		"featured":   products,
+	breadcrumbs := []breadcrumb.Breadcrumb{
+		{Name: "Home", URL: "/"},
+	}
+
+	datas := helpers.GetBaseData(r, map[string]interface{}{
+		"title":       "Beranda",
+		"categories":  categories,
+		"category":    "",
+		"current":     1,
+		"totalPages":  1,
+		"featured":    products,
+		"breadcrumbs": breadcrumbs,
 	})
+
+	_ = h.render.HTML(w, http.StatusOK, "home", datas)
 }

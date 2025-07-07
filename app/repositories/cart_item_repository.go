@@ -23,8 +23,10 @@ func (r *CartItemRepository) Update(ctx context.Context, item *models.CartItem) 
 	return r.DB.WithContext(ctx).Save(item).Error
 }
 
-func (r *CartItemRepository) Delete(ctx context.Context, id string) error {
-	return r.DB.WithContext(ctx).Delete(&models.CartItem{}, "id = ?", id).Error
+func (r *CartItemRepository) Delete(ctx context.Context, cartID string, productID string) error {
+	return r.DB.WithContext(ctx).
+		Where("cart_id = ? AND product_id = ?", cartID, productID).
+		Delete(&models.CartItem{}).Error
 }
 
 func (r *CartItemRepository) GetByID(ctx context.Context, id string) (*models.CartItem, error) {

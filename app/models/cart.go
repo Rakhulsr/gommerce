@@ -11,4 +11,5 @@ type Cart struct {
 	DiscountAmount  decimal.Decimal `gorm:"decimal(16,2);"`
 	DiscountPercent decimal.Decimal `gorm:"decimal(10,2);"`
 	GrandTotal      decimal.Decimal `gorm:"decimal(16,2);"`
+	TotalWeight     int             `gorm:"-"`
 }

@@ -4,6 +4,8 @@ package renderer
 import (
 	"html/template"
 
+	"github.com/leekchan/accounting"
+	"github.com/shopspring/decimal"
 	"github.com/unrolled/render"
 )
 
@@ -33,6 +35,16 @@ func New() *render.Render {
 						return a
 					}
 					return b
+				},
+				"rupiah": func(d decimal.Decimal) string {
+					ac := accounting.Accounting{
+						Symbol:    "Rp",
+						Precision: 0,
+						Thousand:  ".",
+						Decimal:   ",", // meskipun tidak dipakai karena Precision: 0
+					}
+					f, _ := d.Float64()
+					return ac.FormatMoney(f)
 				},
 			},
 		},
