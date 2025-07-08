@@ -8,6 +8,7 @@ import (
 	"github.com/Rakhulsr/go-ecommerce/app/handlers"
 	"github.com/Rakhulsr/go-ecommerce/app/middlewares"
 	"github.com/Rakhulsr/go-ecommerce/app/repositories"
+	"github.com/Rakhulsr/go-ecommerce/app/services"
 	"github.com/Rakhulsr/go-ecommerce/app/utils/renderer"
 	"github.com/gorilla/mux"
 	"gorm.io/gorm"
@@ -22,9 +23,12 @@ func NewRouter(db *gorm.DB) *mux.Router {
 	cartRepo := repositories.NewCartRepository(db)
 	cartItemRepo := repositories.NewCartItemRepository(db)
 
+	shippingSvc := services.NewRajaOngkirService()
+
 	productHandler := handlers.NewProductHandler(productRepo, categoryRepo, render)
 	homeHandler := handlers.NewHomeHandler(render, categoryRepo, productRepo)
-	cartHandler := handlers.NewCartHandler(productRepo, cartRepo, *render, cartItemRepo)
+	cartHandler := handlers.NewCartHandler(productRepo, cartRepo, *render, cartItemRepo, shippingSvc)
+	locationAPIHandler := handlers.NewLocationAPIHandler(shippingSvc, render)
 
 	router.PathPrefix("/css/").Handler(http.StripPrefix("/css/", http.FileServer(http.Dir("assets/css"))))
 	router.PathPrefix("/js/").Handler(http.StripPrefix("/js/", http.FileServer(http.Dir("assets/js"))))
@@ -43,6 +47,10 @@ func NewRouter(db *gorm.DB) *mux.Router {
 	router.HandleFunc("/carts/add", cartHandler.AddItemCart).Methods("POST")
 	router.HandleFunc("/carts/update", cartHandler.UpdateCartItem).Methods("POST")
 	router.HandleFunc("/carts/delete", cartHandler.DeleteCartItem).Methods("POST")
+
+	router.HandleFunc("/provinces", locationAPIHandler.GetProvincesAPI).Methods("GET")
+	router.HandleFunc("/cities", locationAPIHandler.GetCitiesAPI).Methods("GET")
+	router.HandleFunc("/calculate-shipping-cost", locationAPIHandler.CalculateShippingCostAPI).Methods("POST")
 
 	return router
 }

@@ -10,9 +10,12 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/Rakhulsr/go-ecommerce/app/configs"
 	"github.com/Rakhulsr/go-ecommerce/app/helpers"
 	"github.com/Rakhulsr/go-ecommerce/app/models"
+	"github.com/Rakhulsr/go-ecommerce/app/models/other"
 	"github.com/Rakhulsr/go-ecommerce/app/repositories"
+	"github.com/Rakhulsr/go-ecommerce/app/services"
 	"github.com/Rakhulsr/go-ecommerce/app/utils/breadcrumb"
 	"github.com/Rakhulsr/go-ecommerce/app/utils/calc"
 	"github.com/Rakhulsr/go-ecommerce/app/utils/sessions"
@@ -27,10 +30,11 @@ type CartHandler struct {
 	cartRepo     repositories.CartRepository
 	cartItemRepo repositories.CartItemRepository
 	render       *render.Render
+	locationSvc  *services.RajaOngkirService
 }
 
-func NewCartHandler(productRepo repositories.ProductRepository, cartRepo repositories.CartRepository, render render.Render, cartItemRepo repositories.CartItemRepository) *CartHandler {
-	return &CartHandler{productRepo, cartRepo, cartItemRepo, &render}
+func NewCartHandler(productRepo repositories.ProductRepository, cartRepo repositories.CartRepository, render render.Render, cartItemRepo repositories.CartItemRepository, locationSvc *services.RajaOngkirService) *CartHandler {
+	return &CartHandler{productRepo, cartRepo, cartItemRepo, &render, locationSvc}
 }
 
 func (h *CartHandler) GetCart(w http.ResponseWriter, r *http.Request) {
@@ -48,22 +52,26 @@ func (h *CartHandler) GetCart(w http.ResponseWriter, r *http.Request) {
 
 	totalWeight := 0
 
+	grandTotal := decimal.NewFromFloat(0)
+
 	for _, cartItem := range cart.CartItems {
 		if cartItem.Product.ID != "" {
 			productName := cartItem.Product.Name
 			productWeigth := cartItem.Product.Weight.InexactFloat64()
-
 			ceilWeight := math.Ceil(productWeigth)
-
 			itemWeight := cartItem.Qty * int(ceilWeight)
-
 			totalWeight += itemWeight
+
+			itemTotal := cartItem.GrandTotal
+			grandTotal = grandTotal.Add(itemTotal)
+
 			fmt.Println("product name :", productName)
 
 		}
 	}
 
 	cart.TotalWeight = totalWeight
+	cart.GrandTotal = grandTotal
 
 	fmt.Println("Total Weight:", cart.TotalWeight)
 	breadcrumbs := []breadcrumb.Breadcrumb{
@@ -74,13 +82,37 @@ func (h *CartHandler) GetCart(w http.ResponseWriter, r *http.Request) {
 	status := r.URL.Query().Get("status")
 	message := r.URL.Query().Get("message")
 
+	provinces, err := h.locationSvc.GetProvincesFromAPI()
+	if err != nil {
+		log.Printf("GetCart: Gagal mengambil daftar provinsi dari RajaOngkir API: %v", err)
+		status = "error"
+		message = "Gagal memuat daftar provinsi untuk pengiriman. Coba lagi nanti."
+		provinces = []other.Province{}
+	}
+
+	supportedCouriers := []other.Courier{
+		{Code: "jne", Name: "JNE"},
+		// {Code: "pos", Name: "POS Indonesia"},
+		{Code: "tiki", Name: "TIKI"},
+	}
+
+	finalPrice := grandTotal
+
+	originCity := configs.LoadENV.API_ONGKIR_ORIGIN
+
 	pageSpecificData := map[string]interface{}{
-		"title":         "Keranjang Belanja",
-		"cart":          cart,
-		"totalWeight":   totalWeight,
-		"breadcrumbs":   breadcrumbs,
-		"MessageStatus": status,
-		"Message":       message,
+		"title":                 "Keranjang Belanja",
+		"cart":                  cart,
+		"totalWeight":           totalWeight,
+		"grandTotal":            grandTotal,
+		"breadcrumbs":           breadcrumbs,
+		"MessageStatus":         status,
+		"Message":               message,
+		"provinces":             provinces,
+		"couriers":              supportedCouriers,
+		"OriginCityID":          originCity,
+		"finalPrice":            finalPrice,
+		"GrandTotalAmountForJS": grandTotal.IntPart(),
 	}
 
 	datas := helpers.GetBaseData(r, pageSpecificData)
@@ -219,12 +251,6 @@ func (h *CartHandler) AddItemCart(w http.ResponseWriter, r *http.Request) {
 	if err := h.cartRepo.UpdateCartSummary(r.Context(), cartID); err != nil {
 		log.Printf("Gagal update ringkasan cart: %v", err)
 	}
-
-	// product, err = h.productRepo.GetByID(r.Context(), productID) // Ini tidak perlu lagi karena product sudah di-load di awal fungsi
-	// if err != nil { // Karena product sudah di-load, error ini tidak akan terjadi di sini unless ada masalah dengan repo
-	// 	http.Redirect(w, r, fmt.Sprintf("/products/%s?status=error&message=%s", product.Slug, url.QueryEscape("Produk tidak ditemukan atau error.")), http.StatusSeeOther)
-	// 	return
-	// }
 
 	switch action {
 	case "buy":

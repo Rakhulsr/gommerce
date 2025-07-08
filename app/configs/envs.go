@@ -8,13 +8,16 @@ import (
 )
 
 type ENV struct {
-	DBHost      string
-	DBUser      string
-	DBPassword  string
-	DBName      string
-	DBPort      string
-	Port        string
-	SESSION_KEY string
+	DBHost              string
+	DBUser              string
+	DBPassword          string
+	DBName              string
+	DBPort              string
+	Port                string
+	SESSION_KEY         string
+	API_ONGKIR_BASE_URL string
+	API_ONGKIR_KEY      string
+	API_ONGKIR_ORIGIN   string
 }
 
 func LoadEnv() ENV {
@@ -30,13 +33,16 @@ func LoadEnv() ENV {
 	}
 
 	return ENV{
-		DBHost:      os.Getenv("DB_HOST"),
-		DBUser:      os.Getenv("DB_USER"),
-		DBPassword:  os.Getenv("DB_PASSWORD"),
-		DBName:      os.Getenv("DB_NAME"),
-		DBPort:      os.Getenv("DB_PORT"),
-		Port:        os.Getenv("APP_PORT"),
-		SESSION_KEY: os.Getenv("SESSION_KEY"),
+		DBHost:              os.Getenv("DB_HOST"),
+		DBUser:              os.Getenv("DB_USER"),
+		DBPassword:          os.Getenv("DB_PASSWORD"),
+		DBName:              os.Getenv("DB_NAME"),
+		DBPort:              os.Getenv("DB_PORT"),
+		Port:                os.Getenv("APP_PORT"),
+		SESSION_KEY:         os.Getenv("SESSION_KEY"),
+		API_ONGKIR_BASE_URL: os.Getenv("API_ONGKIR_BASE_URL"),
+		API_ONGKIR_KEY:      os.Getenv("API_ONGKIR_KEY"),
+		API_ONGKIR_ORIGIN:   os.Getenv("API_ONGKIR_ORIGIN"),
 	}
 
 }

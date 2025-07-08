@@ -1,4 +1,3 @@
-// renderer/renderer.go
 package renderer
 
 import (
@@ -41,7 +40,7 @@ func New() *render.Render {
 						Symbol:    "Rp",
 						Precision: 0,
 						Thousand:  ".",
-						Decimal:   ",", // meskipun tidak dipakai karena Precision: 0
+						Decimal:   ",",
 					}
 					f, _ := d.Float64()
 					return ac.FormatMoney(f)

@@ -1,25 +1,45 @@
-package format
+package helpers
 
 import (
-	"fmt"
 	"strings"
+
+	"github.com/shopspring/decimal"
 )
 
-func Rupiah(amount float64) string {
-	str := fmt.Sprintf("%.0f", amount)
+func FormatRupiah(amount interface{}) string {
+	var decAmount decimal.Decimal
+	switch v := amount.(type) {
+	case decimal.Decimal:
+		decAmount = v
+	case float64:
+		decAmount = decimal.NewFromFloat(v)
+	case int:
+		decAmount = decimal.NewFromInt(int64(v))
+	case int64:
+		decAmount = decimal.NewFromInt(v)
+	case string:
+
+		parsed, err := decimal.NewFromString(v)
+		if err != nil {
+			return "Rp 0"
+		}
+		decAmount = parsed
+	default:
+		return "Rp 0"
+	}
+
+	str := decAmount.StringFixed(0)
+
 	n := len(str)
 	if n <= 3 {
-		return "Rp" + str
+		return "Rp " + str
 	}
-
-	var result []string
-	for i := n; i > 0; i -= 3 {
-		start := i - 3
-		if start < 0 {
-			start = 0
+	var b strings.Builder
+	for i, char := range str {
+		b.WriteRune(char)
+		if (n-1-i)%3 == 0 && i != n-1 {
+			b.WriteRune('.')
 		}
-		result = append([]string{str[start:i]}, result...)
 	}
-
-	return "Rp" + strings.Join(result, ".")
+	return "Rp " + b.String()
 }

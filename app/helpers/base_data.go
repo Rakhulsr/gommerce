@@ -1,5 +1,3 @@
-// app/helpers/helpers.go (DIUBAH UNTUK FLASH MANUAL)
-
 package helpers
 
 import (
