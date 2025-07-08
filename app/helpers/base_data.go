@@ -9,7 +9,7 @@ import (
 )
 
 func FormatRupiah(amount float64) string {
-	return fmt.Sprintf("Rp %,.0f", amount)
+	return fmt.Sprintf("Rp %.0f", amount)
 }
 
 func GetBaseData(r *http.Request, pageSpecificData map[string]interface{}) map[string]interface{} {
