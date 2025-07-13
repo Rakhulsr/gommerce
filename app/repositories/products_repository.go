@@ -8,7 +8,7 @@ import (
 	"gorm.io/gorm"
 )
 
-type ProductRepository interface {
+type ProductRepositoryImpl interface {
 	GetProducts(ctx context.Context) ([]models.Product, error)
 	GetByCategorySlug(ctx context.Context, slug string) ([]models.Product, error)
 	GetPaginated(ctx context.Context, limit, offset int) ([]models.Product, int64, error)
@@ -23,7 +23,7 @@ type productRepository struct {
 	db *gorm.DB
 }
 
-func NewProductRepository(db *gorm.DB) ProductRepository {
+func NewProductRepository(db *gorm.DB) ProductRepositoryImpl {
 	return &productRepository{db}
 }
 

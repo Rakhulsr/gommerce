@@ -1,0 +1,79 @@
+{{ define "auth/addresses_index" }}
+
+<div class="container mx-auto px-4 py-8 max-w-4xl">
+    <h1 class="text-3xl font-bold text-gray-800 mb-6">Daftar Alamat Saya</h1>
+
+    
+
+    <div class="mb-6 flex justify-end">
+        <a href="/addresses/add" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-300">
+            Tambah Alamat Baru
+        </a>
+    </div>
+
+    {{ if .Addresses }}
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {{ range .Addresses }}
+            <div class="bg-white rounded-lg shadow-md p-6 border {{ if .IsPrimary }}border-blue-500 ring-2 ring-blue-200{{ else }}border-gray-200{{ end }}">
+                <h2 class="text-xl font-semibold text-gray-900 mb-3">{{ .Name }} {{ if .IsPrimary }}<span class="ml-2 px-2 py-1 bg-blue-100 text-blue-800 text-xs font-semibold rounded-full">Utama</span>{{ end }}</h2>
+                <p class="text-gray-700 mb-1">{{ .Address1 }}</p>
+                {{ if .Address2 }}
+                    <p class="text-gray-700 mb-1">{{ .Address2 }}</p>
+                {{ end }}
+                <p class="text-gray-700 mb-1">{{ .CityName }}, {{ .ProvinceName }} {{ .PostCode }}</p>
+                <p class="text-gray-700 mb-1">Telp: {{ .Phone }}</p>
+                <p class="text-gray-700 mb-4">Email: {{ .Email }}</p>
+
+                <div class="flex flex-wrap gap-2 mt-4">
+                    <a href="/addresses/edit/{{ .ID }}" class="bg-yellow-500 hover:bg-yellow-600 text-white text-sm font-bold py-2 px-3 rounded-lg transition duration-300">
+                        Edit
+                    </a>
+                    <form action="/addresses/delete/{{ .ID }}" method="POST" class="inline-block delete-confirm-form">
+                        <input type="hidden" name="_method" value="DELETE">
+                        <button type="submit" class="bg-red-500 hover:bg-red-600 text-white text-sm font-bold py-2 px-3 rounded-lg transition duration-300">
+                            Hapus
+                        </button>
+                    </form>
+                    {{ if not .IsPrimary }}
+                    <form action="/addresses/set-primary/{{ .ID }}" method="POST" class="inline-block">
+                        <button type="submit" class="bg-blue-500 hover:bg-blue-600 text-white text-sm font-bold py-2 px-3 rounded-lg transition duration-300">
+                            Jadikan Utama
+                        </button>
+                    </form>
+                    {{ end }}
+                </div>
+            </div>
+            {{ end }}
+        </div>
+    {{ else }}
+        <div class="bg-gray-100 text-gray-600 p-6 rounded-lg text-center shadow-sm">
+            <p class="text-lg">Anda belum memiliki alamat tersimpan.</p>
+            <p class="mt-2">Tambahkan alamat pertama Anda sekarang!</p>
+        </div>
+    {{ end }}
+</div>
+
+<script>
+   document.querySelectorAll('.delete-confirm-form').forEach(form => {
+            form.addEventListener('submit', function(event) {
+                event.preventDefault();
+
+                Swal.fire({
+                    title: 'Apakah Anda yakin?',
+                    text: "Alamat ini akan dihapus permanen!",
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonColor: '#d33',
+                    cancelButtonColor: '#3085d6',
+                    confirmButtonText: 'Ya, hapus!',
+                    cancelButtonText: 'Batal'
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        form.submit(); 
+                    }
+                });
+            });
+        });
+</script>
+{{ end }}
+

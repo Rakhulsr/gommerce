@@ -7,7 +7,7 @@ import (
 	"gorm.io/gorm"
 )
 
-type CategoryRepository interface {
+type CategoryRepositoryImpl interface {
 	GetAll(ctx context.Context) ([]models.Category, error)
 }
 
@@ -15,7 +15,7 @@ type categoryRepo struct {
 	db *gorm.DB
 }
 
-func NewCategoryRepository(db *gorm.DB) CategoryRepository {
+func NewCategoryRepository(db *gorm.DB) CategoryRepositoryImpl {
 	return &categoryRepo{db}
 }
 

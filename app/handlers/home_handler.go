@@ -11,11 +11,11 @@ import (
 
 type HomeHandler struct {
 	render       *render.Render
-	categoryRepo repositories.CategoryRepository
-	productRepo  repositories.ProductRepository
+	categoryRepo repositories.CategoryRepositoryImpl
+	productRepo  repositories.ProductRepositoryImpl
 }
 
-func NewHomeHandler(r *render.Render, c repositories.CategoryRepository, p repositories.ProductRepository) *HomeHandler {
+func NewHomeHandler(r *render.Render, c repositories.CategoryRepositoryImpl, p repositories.ProductRepositoryImpl) *HomeHandler {
 	return &HomeHandler{
 		render:       r,
 		categoryRepo: c,

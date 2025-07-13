@@ -4,6 +4,8 @@ import "github.com/shopspring/decimal"
 
 type Cart struct {
 	ID              string `gorm:"size:36;not null;uniqueIndex;primary_key"`
+	UserID          string `gorm:"size:36;index"`
+	User            User   `gorm:"foreignKey:UserID"`
 	CartItems       []CartItem
 	BaseTotalPrice  decimal.Decimal `gorm:"decimal(16,2);"`
 	TaxAmount       decimal.Decimal `gorm:"decimal(16,2);"`

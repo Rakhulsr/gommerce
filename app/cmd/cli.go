@@ -5,8 +5,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/Rakhulsr/go-ecommerce/app/configs"
-	"github.com/Rakhulsr/go-ecommerce/app/db/seeders"
+	"github.com/Rakhulsr/go-ecommerce/app/configs" // Import configs package
 	"github.com/Rakhulsr/go-ecommerce/app/models/migrations"
 	"github.com/urfave/cli/v3"
 )
@@ -30,25 +29,36 @@ func RunCli() {
 				},
 			},
 			{
-				Name:  "seed",
-				Usage: "Seed the database with dummy data",
+				Name:  "generate-keys",
+				Usage: "Generate new session authentication and encryption keys for .env",
 				Action: func(ctx context.Context, c *cli.Command) error {
-					db, err := configs.OpenConnection()
-					if err != nil {
+					// Panggil fungsi generator dari package configs
+					if err := configs.GenerateAndPrintSessionKeys(); err != nil {
 						return err
 					}
-					if err := seeders.DBSeed(db); err != nil {
-						return err
-					}
-					log.Println("✅ Seeding complete")
+					log.Println("✅ Key generation complete. Please copy the keys to your .env file.")
 					return nil
 				},
 			},
+			// {
+			// 	Name:  "seed",
+			// 	Usage: "Seed the database with dummy data",
+			// 	Action: func(ctx context.Context, c *cli.Command) error {
+			// 		db, err := configs.OpenConnection()
+			// 		if err != nil {
+			// 			return err
+			// 		}
+			// 		if err := seeders.DBSeed(db); err != nil {
+			// 			return err
+			// 		}
+			// 		log.Println("✅ Seeding complete")
+			// 		return nil
+			// 	},
+			// },
 		},
 	}
 
 	if err := cmd.Run(context.Background(), os.Args); err != nil {
 		log.Fatal(err)
 	}
-
 }

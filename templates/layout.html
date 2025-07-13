@@ -46,7 +46,12 @@
         animation: spin 1s linear infinite; 
       }
 
-      
+    
+      .auth-bg {
+            background-color: azure;
+        }
+
+
       @keyframes spin {
         0% { transform: rotate(0deg); }
         100% { transform: rotate(360deg); }
@@ -54,57 +59,20 @@
       </style>
   </head>
 
- <body class="bg-gray-50 text-gray-800">
+ <body class="bg-gray-50 text-gray-800 {{ if .IsAuthPage }}auth-bg{{ end }} ">
     <div id="preloader">
         <div class="spinner"></div> 
     </div>
 
-    <header class="bg-white shadow-sm sticky top-0 z-50">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex justify-between h-16 items-center">
-                <div class="flex-shrink-0">
-                    <a href="/" class="text-3xl font-extrabold text-emerald-600 flex items-center gap-2">
-                        <i class="fa-solid fa-moon text-emerald-500"></i>
-                        <span>Toko Bulan</span>
-                    </a>
-                </div>
-
-                <div class="flex-1 mx-6 hidden md:block">
-                    <form action="/products" method="GET" class="relative">
-                        <input
-                            type="text"
-                            name="q"
-                            value="{{ .query }}"
-                            placeholder="Cari produk..."
-                            class="w-full border border-gray-300 rounded-full py-2 pl-10 pr-4 focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:border-transparent text-gray-700 placeholder-gray-400"
-                        />
-                        <button type="submit" class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-emerald-500">
-                            <i class="fas fa-search"></i> </button>
-                    </form>
-                </div>
-
-                <div class="flex space-x-4 items-center">
-                    <a href="/carts" class="relative text-gray-600 hover:text-emerald-600">
-                        <span id="cart-count-badge" class="absolute -top-2 right-2 bg-red-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center {{ if eq .CartCount 0 }}hidden{{ end }} shadow">
-                            {{ if gt .CartCount 0 }}{{ .CartCount }}{{ else }}0{{ end }}
-                        </span>
-                        <i class="fa-solid fa-cart-shopping text-xl"></i>
-                    </a>
-
-                    <div class="h-6 w-px bg-gray-200 mx-2"></div>
-                    <a href="/login" class="text-emerald-700 hover:bg-emerald-50 border border-emerald-600 px-4 py-2 rounded-md text-sm font-medium transition duration-200 ease-in-out">Masuk</a>
-                    <a href="/register" class="text-white bg-emerald-600 hover:bg-emerald-700 px-4 py-2 rounded-md text-sm font-medium transition duration-200 ease-in-out shadow-md">Daftar</a>
-                </div>
-            </div>
-        </div>
-        <div class="border-t border-gray-100 my-3"></div>
-    </header>
+ 
+      {{ template "header" . }}
+ 
     
    
-    {{ if .breadcrumbs }}
+   {{ if .Breadcrumbs }}
     <nav class="max-w-7xl mx-auto mt-4 px-4 sm:px-6 lg:px-8 text-sm text-gray-600">
         <ol class="list-none p-0 inline-flex">
-            {{ range $index, $crumb := .breadcrumbs }}
+            {{ range $index, $crumb := .Breadcrumbs }}
                 {{ if $index }}
                     <li class="mx-1">></li>
                 {{ end }}
@@ -118,7 +86,7 @@
             {{ end }}
         </ol>
     </nav>
-    {{ end }}
+  {{ end }}
 
     {{ if .Message }}
     <div id="flash-message" class="max-w-7xl mx-auto mt-4 px-4 sm:px-6 lg:px-8 animate-fade-in-down">
@@ -137,56 +105,22 @@
     {{ end }}
   
 
-    <main class="max-w-6xl mx-auto px-4 pt-6 pb-12" id="product-page">
-        {{ yield }}
-    </main>
-
-    <footer class="bg-gray-800 text-gray-300 pt-12 pb-8 mt-16">
-        <div class="max-w-7xl mx-auto px-4 grid grid-cols-1 md:grid-cols-4 gap-8">
-            <div>
-                <h2 class="text-3xl font-extrabold text-white mb-4">Toko Bulan</h2>
-                <p class="text-sm leading-relaxed text-gray-400">
-                    Toko terpercaya untuk kebutuhan hewan peliharaan, ternak, dan perlengkapan memancing Anda. Belanja mudah & cepat di Toko Bulan.
-                </p>
-            </div>
-    
-            <div>
-                <h3 class="text-lg font-semibold text-white mb-4">Navigasi</h3>
-                <ul class="space-y-2 text-sm">
-                    <li><a href="/" class="hover:text-emerald-300 transition duration-150 ease-in-out">Beranda</a></li>
-                    <li><a href="/products" class="hover:text-emerald-300 transition duration-150 ease-in-out">Produk</a></li>
-                    <li><a href="/login" class="hover:text-emerald-300 transition duration-150 ease-in-out">Masuk</a></li>
-                    <li><a href="/register" class="hover:text-emerald-300 transition duration-150 ease-in-out">Daftar</a></li>
-                </ul>
-            </div>
-            
-            <div>
-                <h3 class="text-lg font-semibold text-white mb-4">Bantuan</h3>
-                <ul class="space-y-2 text-sm">
-                    <li><a href="#" class="hover:text-emerald-300 transition duration-150 ease-in-out">FAQ</a></li>
-                    <li><a href="#" class="hover:text-emerald-300 transition duration-150 ease-in-out">Cara Belanja</a></li>
-                    <li><a href="#" class="hover:text-emerald-300 transition duration-150 ease-in-out">Pengembalian</a></li>
-                    <li><a href="#" class="hover:text-emerald-300 transition duration-150 ease-in-out">Hubungi Kami</a></li>
-                </ul>
-            </div>
-            
-            <div>
-                <h3 class="text-lg font-semibold text-white mb-4">Hubungi Kami</h3>
-                <p class="text-sm text-gray-400">Email: support@tokobulan.com</p>
-                <p class="text-sm mb-4 text-gray-400">Telepon: +62 812-3456-7890</p>
-                <div class="flex space-x-4 mt-4">
-                    <a href="#" class="text-gray-400 hover:text-emerald-400 transition duration-150 ease-in-out"><i class="fab fa-facebook-f text-lg"></i></a>
-                    <a href="#" class="text-gray-400 hover:text-emerald-400 transition duration-150 ease-in-out"><i class="fab fa-instagram text-lg"></i></a>
-                    <a href="#" class="text-gray-400 hover:text-emerald-400 transition duration-150 ease-in-out"><i class="fab fa-twitter text-lg"></i></a>
-                    <a href="#" class="text-gray-400 hover:text-emerald-400 transition duration-150 ease-in-out"><i class="fab fa-whatsapp text-lg"></i></a>
+  <main class="{{ if .IsAuthPage }}max-w-xl mx-auto px-4 pt-12 pb-24{{ else }}max-w-6xl mx-auto px-4 pt-6 pb-12{{ end }}" id="product-page">
+        {{ block "content" . }}
+            {{ yield }}
+            {{ if .IsAdminPage }}
+                <div class="bg-purple-100 border border-purple-400 text-purple-700 px-4 py-3 rounded relative mb-4" role="alert">
+                    <strong class="font-bold">Mode Admin:</strong>
+                    <span class="block sm:inline"> Anda melihat halaman ini sebagai Administrator.</span>
+                    <a href="/admin/dashboard" class="text-purple-700 hover:text-purple-900 underline ml-2">Pergi ke Dashboard Admin</a>
                 </div>
-            </div>
-        </div>
+            {{ end }}
 
-        <div class="mt-12 border-t border-gray-700 pt-6 text-center text-sm text-gray-500">
-            &copy; 2025 Toko Bulan. All rights reserved.
-        </div>
-    </footer>
+        {{ end }}
+    </main>
+    
+    {{ template "footer" .}}
+    
 
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="/js/index.js"></script>
@@ -197,7 +131,14 @@
     <script src="/js/shipping.js"></script>
 
     
-
+     <script>
+        window.addEventListener('load', () => {
+            const preloader = document.getElementById('preloader');
+            if (preloader) {
+                preloader.classList.add('hidden');
+            }
+        });
+    </script>
 </body>
 </html>
-</html>
+

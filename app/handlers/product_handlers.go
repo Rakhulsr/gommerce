@@ -13,12 +13,12 @@ import (
 )
 
 type ProductHandler struct {
-	repo         repositories.ProductRepository
-	categoryRepo repositories.CategoryRepository
+	repo         repositories.ProductRepositoryImpl
+	categoryRepo repositories.CategoryRepositoryImpl
 	render       *render.Render
 }
 
-func NewProductHandler(p repositories.ProductRepository, c repositories.CategoryRepository, r *render.Render) *ProductHandler {
+func NewProductHandler(p repositories.ProductRepositoryImpl, c repositories.CategoryRepositoryImpl, r *render.Render) *ProductHandler {
 	return &ProductHandler{p, c, r}
 }
 
@@ -75,6 +75,7 @@ func (h *ProductHandler) Products(w http.ResponseWriter, r *http.Request) {
 		"category":    slug,
 		"searchQuery": query,
 		"breadcrumbs": breadcrumbs,
+		"IsAuthPage":  false,
 	})
 
 	if currentCategory.ID != "" {

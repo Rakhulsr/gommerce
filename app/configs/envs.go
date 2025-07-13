@@ -18,6 +18,14 @@ type ENV struct {
 	API_ONGKIR_BASE_URL string
 	API_ONGKIR_KEY      string
 	API_ONGKIR_ORIGIN   string
+	JWTSecret           string
+	AppAuthKey          string
+	AppEncKey           string
+	EmailHost           string
+	EmailPort           string
+	EmailUsername       string
+	EmailPassword       string
+	EmailFrom           string
 }
 
 func LoadEnv() ENV {
@@ -43,6 +51,14 @@ func LoadEnv() ENV {
 		API_ONGKIR_BASE_URL: os.Getenv("API_ONGKIR_BASE_URL"),
 		API_ONGKIR_KEY:      os.Getenv("API_ONGKIR_KEY"),
 		API_ONGKIR_ORIGIN:   os.Getenv("API_ONGKIR_ORIGIN"),
+		JWTSecret:           os.Getenv("JWT_SECRET"),
+		AppAuthKey:          os.Getenv("APP_AUTH_KEY"),
+		AppEncKey:           os.Getenv("APP_ENC_KEY"),
+		EmailHost:           os.Getenv("EMAIL_HOST"),
+		EmailPort:           os.Getenv("EMAIL_PORT"),
+		EmailUsername:       os.Getenv("EMAIL_USERNAME"),
+		EmailPassword:       os.Getenv("EMAIL_PASSWORD"),
+		EmailFrom:           os.Getenv("EMAIL_USERNAME"),
 	}
 
 }

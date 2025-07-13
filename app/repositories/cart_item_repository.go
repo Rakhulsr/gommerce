@@ -11,8 +11,17 @@ type CartItemRepository struct {
 	DB *gorm.DB
 }
 
-func NewCartItemRepository(db *gorm.DB) CartItemRepository {
-	return CartItemRepository{DB: db}
+type CartItemRepositoryImpl interface {
+	Add(ctx context.Context, item *models.CartItem) error
+	Update(ctx context.Context, item *models.CartItem) error
+	Delete(ctx context.Context, cartID string, productID string) error
+	GetByID(ctx context.Context, id string) (*models.CartItem, error)
+	GetByCartID(ctx context.Context, cartID string) ([]models.CartItem, error)
+	GetCartAndProduct(ctx context.Context, cartID, productID string) (*models.CartItem, error)
+}
+
+func NewCartItemRepository(db *gorm.DB) CartItemRepositoryImpl {
+	return &CartItemRepository{db}
 }
 
 func (r *CartItemRepository) Add(ctx context.Context, item *models.CartItem) error {

@@ -2,6 +2,7 @@ package renderer
 
 import (
 	"html/template"
+	"log"
 
 	"github.com/leekchan/accounting"
 	"github.com/shopspring/decimal"
@@ -9,7 +10,9 @@ import (
 )
 
 func New() *render.Render {
-	return render.New(render.Options{
+	r := render.New(render.Options{
+
+		Directory:  "templates",
 		Layout:     "layout",
 		Extensions: []string{".html"},
 		Funcs: []template.FuncMap{
@@ -48,4 +51,8 @@ func New() *render.Render {
 			},
 		},
 	})
+
+	log.Println("Renderer initialized. Templates will be loaded from 'assets/views' and its subdirectories.")
+
+	return r
 }

@@ -1,0 +1,58 @@
+{{define "header"}}
+
+<header class="bg-white shadow-sm sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex justify-between h-16 items-center">
+            <div class="flex-shrink-0">
+                <a href="/" class="text-3xl font-extrabold text-emerald-600 flex items-center gap-2">
+                    <i class="fa-solid fa-moon text-emerald-500"></i>
+                    <span>Toko Bulan</span>
+                </a>
+            </div>
+
+            <div class="flex-1 mx-6 hidden md:block">
+                <form action="/products" method="GET" class="relative">
+                    <input
+                        type="text"
+                        name="q"
+                        value="{{ .Query.Get "q" }}" 
+                        placeholder="Cari produk..."
+                        class="w-full border border-gray-300 rounded-full py-2 pl-10 pr-4 focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:border-transparent text-gray-700 placeholder-gray-400"
+                    />
+                    <button type="submit" class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-emerald-500">
+                        <i class="fas fa-search"></i>
+                    </button>
+                </form>
+            </div>
+
+            <div class="flex space-x-4 items-center">
+                <a href="/carts" class="relative text-gray-600 hover:text-emerald-600">
+                    <span id="cart-count-badge" class="absolute -top-2 right-2 bg-red-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center {{ if eq .CartCount 0 }}hidden{{ end }} shadow">
+                        {{ if gt .CartCount 0 }}{{ .CartCount }}{{ else }}0{{ end }}
+                    </span>
+                    <i class="fa-solid fa-cart-shopping text-xl"></i>
+                </a>
+
+                <div class="h-6 w-px bg-gray-200 mx-2"></div>
+
+                {{ if .User }}
+                    <a href="/profile" class="flex items-center space-x-2 text-gray-700 hover:text-emerald-600 group">
+                        <i class="fas fa-user-circle text-2xl group-hover:text-emerald-600"></i>
+                        <span class="hidden md:block text-sm font-medium">{{ .User.FirstName }}</span>
+                    </a>
+                    <form action="/logout" method="POST" class="inline-block">
+                        <button type="submit" class="text-white bg-red-500 hover:bg-red-600 px-4 py-2 rounded-md text-sm font-medium transition duration-200 ease-in-out shadow-md">
+                            Logout
+                        </button>
+                    </form>
+                {{ else }}
+                    <a href="/login" class="text-emerald-700 hover:bg-emerald-50 border border-emerald-600 px-4 py-2 rounded-md text-sm font-medium transition duration-200 ease-in-out">Masuk</a>
+                    <a href="/register" class="text-white bg-emerald-600 hover:bg-emerald-700 px-4 py-2 rounded-md text-sm font-medium transition duration-200 ease-in-out shadow-md">Daftar</a>
+                {{ end }}
+            </div>
+        </div>
+    </div>
+    <div class="border-t border-gray-100 my-3"></div>
+</header>
+{{end}}
+

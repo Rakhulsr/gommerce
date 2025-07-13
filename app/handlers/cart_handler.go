@@ -18,7 +18,6 @@ import (
 	"github.com/Rakhulsr/go-ecommerce/app/services"
 	"github.com/Rakhulsr/go-ecommerce/app/utils/breadcrumb"
 	"github.com/Rakhulsr/go-ecommerce/app/utils/calc"
-	"github.com/Rakhulsr/go-ecommerce/app/utils/sessions"
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 	"github.com/unrolled/render"
@@ -26,32 +25,46 @@ import (
 )
 
 type CartHandler struct {
-	productRepo  repositories.ProductRepository
-	cartRepo     repositories.CartRepository
-	cartItemRepo repositories.CartItemRepository
+	productRepo  repositories.ProductRepositoryImpl
+	cartRepo     repositories.CartRepositoryImpl
+	cartItemRepo repositories.CartItemRepositoryImpl
 	render       *render.Render
 	locationSvc  *services.RajaOngkirService
 }
 
-func NewCartHandler(productRepo repositories.ProductRepository, cartRepo repositories.CartRepository, render render.Render, cartItemRepo repositories.CartItemRepository, locationSvc *services.RajaOngkirService) *CartHandler {
-	return &CartHandler{productRepo, cartRepo, cartItemRepo, &render, locationSvc}
+func NewCartHandler(productRepo repositories.ProductRepositoryImpl, cartRepo repositories.CartRepositoryImpl, render *render.Render, cartItemRepo repositories.CartItemRepositoryImpl, locationSvc *services.RajaOngkirService) *CartHandler {
+	return &CartHandler{productRepo, cartRepo, cartItemRepo, render, locationSvc}
 }
 
 func (h *CartHandler) GetCart(w http.ResponseWriter, r *http.Request) {
-	cartID, err := sessions.GetCartID(w, r)
-	if err != nil {
+	cartID, ok := r.Context().Value(helpers.ContextKeyCartID).(string)
+	if !ok || cartID == "" {
 		http.Error(w, "Gagal mengakses cart", http.StatusInternalServerError)
+		log.Printf("GetCart: CartID not found in context.")
 		return
 	}
 
 	cart, err := h.cartRepo.GetCartWithItems(r.Context(), cartID)
 	if err != nil {
+
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+
+			log.Printf("GetCart: Cart with ID %s not found, potentially invalid ID in session.", cartID)
+
+			// Optional: Clear the invalid cart ID from session if you want
+			// if h.sessionStore != nil {
+			// 	_ = h.sessionStore.SetCartID(w, r, "") // Kosongkan CartID di sesi
+			// }
+
+			http.Redirect(w, r, fmt.Sprintf("/carts?status=info&message=%s", url.QueryEscape("Keranjang Anda kosong atau tidak valid.")), http.StatusSeeOther)
+			return
+		}
+		log.Printf("GetCart: Gagal mengambil data cart untuk ID %s: %v", cartID, err)
 		http.Error(w, "Gagal mengambil data cart", http.StatusInternalServerError)
 		return
 	}
 
 	totalWeight := 0
-
 	grandTotal := decimal.NewFromFloat(0)
 
 	for _, cartItem := range cart.CartItems {
@@ -97,7 +110,6 @@ func (h *CartHandler) GetCart(w http.ResponseWriter, r *http.Request) {
 	}
 
 	finalPrice := grandTotal
-
 	originCity := configs.LoadENV.API_ONGKIR_ORIGIN
 
 	pageSpecificData := map[string]interface{}{
@@ -130,9 +142,9 @@ func (h *CartHandler) AddItemCart(w http.ResponseWriter, r *http.Request) {
 	qtyStr := r.FormValue("qty")
 	action := r.FormValue("action")
 
-	log.Println("Product ID:", productID)
-	log.Println("Qty:", qtyStr)
-	log.Println("action:", action)
+	log.Println("AddItemCart - Product ID:", productID)
+	log.Println("AddItemCart - Qty:", qtyStr)
+	log.Println("AddItemCart - Action:", action)
 
 	if productID == "" || qtyStr == "" {
 		log.Printf("AddItemCart: Data tidak lengkap (productID: '%s', qtyStr: '%s')", productID, qtyStr)
@@ -154,11 +166,40 @@ func (h *CartHandler) AddItemCart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cartID, err := sessions.GetCartID(w, r)
-	if err != nil {
-		log.Printf("AddItemCart: Gagal mendapatkan cart session: %v", err)
-		redirectBackWithError(w, r, productID, "Gagal mendapatkan sesi keranjang.", "error", h.productRepo)
+	// Ambil CartID dari context, bukan lagi dari sessions langsung
+	cartID, ok := r.Context().Value(helpers.ContextKeyCartID).(string)
+	if !ok || cartID == "" {
+		log.Printf("AddItemCart: CartID tidak ditemukan di konteks. Ini seharusnya sudah disiapkan oleh middleware.")
+		redirectBackWithError(w, r, productID, "Gagal mendapatkan sesi keranjang (ID keranjang tidak tersedia).", "error", h.productRepo)
 		return
+	}
+
+	// Logic untuk mendapatkan atau membuat cart berdasarkan cartID dari sesi (jika belum ada di DB)
+	cart, err := h.cartRepo.GetByID(r.Context(), cartID)
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		log.Printf("AddItemCart: Gagal mengambil cart dengan ID %s: %v", cartID, err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	if cart == nil || errors.Is(err, gorm.ErrRecordNotFound) {
+		// Ini adalah skenario di mana cartID sudah ada di sesi (dari middleware)
+		// tapi entitas Cart-nya belum ada di database. Buat baru.
+		cart = &models.Cart{
+			ID:              cartID, // Gunakan CartID dari sesi
+			BaseTotalPrice:  decimal.Decimal{},
+			TaxAmount:       decimal.Decimal{},
+			TaxPercent:      decimal.Decimal{},
+			DiscountAmount:  decimal.Decimal{},
+			DiscountPercent: decimal.Decimal{},
+			GrandTotal:      decimal.Decimal{},
+		}
+		if err := h.cartRepo.CreateCart(r.Context(), cart); err != nil {
+			log.Printf("AddItemCart: Gagal membuat cart baru dengan ID %s: %v", cartID, err)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			return
+		}
+		log.Printf("AddItemCart: Cart baru berhasil dibuat dengan ID: %s", cartID)
 	}
 
 	existingItem, err := h.cartItemRepo.GetCartAndProduct(r.Context(), cartID, productID)
@@ -179,30 +220,6 @@ func (h *CartHandler) AddItemCart(w http.ResponseWriter, r *http.Request) {
 		log.Printf("AddItemCart: Stok tidak mencukupi untuk product %s. Diminta: %d, Tersedia: %d", product.Name, newTotalQtyInCart, product.Stock)
 		redirectBackWithError(w, r, productID, fmt.Sprintf("Stok '%s' tidak mencukupi. Hanya tersedia %d item.", product.Name, product.Stock), "warning", h.productRepo)
 		return
-	}
-
-	cart, err := h.cartRepo.GetByID(r.Context(), cartID)
-	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-		log.Printf("AddItemCart: Gagal mengambil cart: %v", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return
-	}
-
-	if cart == nil || errors.Is(err, gorm.ErrRecordNotFound) {
-		cart = &models.Cart{
-			ID:              cartID,
-			BaseTotalPrice:  decimal.Decimal{},
-			TaxAmount:       decimal.Decimal{},
-			TaxPercent:      decimal.Decimal{},
-			DiscountAmount:  decimal.Decimal{},
-			DiscountPercent: decimal.Decimal{},
-			GrandTotal:      decimal.Decimal{},
-		}
-		if err := h.cartRepo.CreateCart(r.Context(), cart); err != nil {
-			log.Printf("AddItemCart: Gagal membuat cart: %v", err)
-			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-			return
-		}
 	}
 
 	if existingItem != nil {
@@ -271,9 +288,9 @@ func (h *CartHandler) UpdateCartItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cartID, err := sessions.GetCartID(w, r)
-	if err != nil {
-		http.Error(w, "Gagal mendapatkan cart session", http.StatusInternalServerError)
+	cartID, ok := r.Context().Value(helpers.ContextKeyCartID).(string)
+	if !ok || cartID == "" {
+		http.Error(w, "Gagal mendapatkan cart session: CartID tidak tersedia di konteks.", http.StatusInternalServerError)
 		return
 	}
 
@@ -314,9 +331,9 @@ func (h *CartHandler) UpdateCartItem(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *CartHandler) DeleteCartItem(w http.ResponseWriter, r *http.Request) {
-	cartID, err := sessions.GetCartID(w, r)
-	if err != nil {
-		http.Error(w, "Session tidak ditemukan", http.StatusInternalServerError)
+	cartID, ok := r.Context().Value(helpers.ContextKeyCartID).(string)
+	if !ok || cartID == "" {
+		http.Error(w, "Session tidak ditemukan: CartID tidak tersedia di konteks.", http.StatusInternalServerError)
 		return
 	}
 
@@ -336,23 +353,21 @@ func (h *CartHandler) DeleteCartItem(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *CartHandler) GetCartCount(w http.ResponseWriter, r *http.Request) {
-	cartCookie, err := r.Cookie("cart_id")
-	if err != nil {
-
-		w.Write([]byte("0"))
-		return
+	// Ambil CartCount dari konteks yang sudah disisipkan oleh CartCountMiddleware.
+	// CartCountKey sekarang ada di package helpers.
+	if cartCountVal := r.Context().Value(helpers.CartCountKey); cartCountVal != nil {
+		if count, ok := cartCountVal.(int); ok {
+			w.Write([]byte(strconv.Itoa(count)))
+			return
+		}
 	}
 
-	count, err := h.cartRepo.GetCartItemCount(r.Context(), cartCookie.Value)
-	if err != nil {
-		http.Error(w, "Gagal menghitung isi keranjang", http.StatusInternalServerError)
-		return
-	}
-
-	w.Write([]byte(strconv.Itoa(count)))
+	// Jika CartCount tidak ditemukan di konteks atau bukan tipe int,
+	// asumsikan 0 item di keranjang. Ini adalah fallback yang aman.
+	w.Write([]byte("0"))
 }
 
-func redirectBackWithError(w http.ResponseWriter, r *http.Request, productID string, msg string, status string, productRepo repositories.ProductRepository) {
+func redirectBackWithError(w http.ResponseWriter, r *http.Request, productID string, msg string, status string, productRepo repositories.ProductRepositoryImpl) {
 	if productID != "" {
 		product, err := productRepo.GetByID(r.Context(), productID)
 		if err == nil && product != nil {

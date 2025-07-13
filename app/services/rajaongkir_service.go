@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"time"
 
 	"github.com/Rakhulsr/go-ecommerce/app/configs"
 	"github.com/Rakhulsr/go-ecommerce/app/models/other"
@@ -35,7 +36,9 @@ type RajaOngkirService struct {
 func NewRajaOngkirService() *RajaOngkirService {
 
 	return &RajaOngkirService{
-		client:  &http.Client{},
+		client: &http.Client{
+			Timeout: 30 * time.Second,
+		},
 		apiKey:  rajaOngkirAPIKey,
 		baseURL: rajaOngkirBaseURL,
 	}

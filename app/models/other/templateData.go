@@ -1,0 +1,39 @@
+package other
+
+import (
+	"net/url"
+
+	"github.com/Rakhulsr/go-ecommerce/app/utils/breadcrumb"
+)
+
+type UserForTemplate struct {
+	ID        string
+	FirstName string
+	LastName  string
+	Email     string
+	Role      string
+	// RememberTokenSelector *string
+	// RememberTokenHash     string
+
+	// PasswordResetToken   *string
+	// PasswordResetExpires *time.Time
+
+	// CreatedAt time.Time
+	// UpdatedAt time.Time
+	// DeletedAt gorm.DeletedAt
+}
+
+type BasePageData struct {
+	Title         string
+	IsLoggedIn    bool
+	User          *UserForTemplate
+	UserID        string
+	CartCount     int
+	CSRFToken     string
+	Message       string
+	MessageStatus string
+	Query         url.Values
+	Breadcrumbs   []breadcrumb.Breadcrumb
+	IsAuthPage    bool
+	IsAdminPage   bool
+}

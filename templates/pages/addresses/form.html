@@ -1,0 +1,150 @@
+{{ define "auth/addresses_form" }}
+
+<div class="container mx-auto px-4 py-8 max-w-2xl">
+    <h1 class="text-3xl font-bold text-gray-800 mb-6">
+        {{ if .IsEdit }}Edit Alamat{{ else }}Tambah Alamat Baru{{ end }}
+    </h1>
+
+    
+
+    <form action="{{ .FormAction }}" method="POST" class="bg-white rounded-lg shadow-md p-8">
+        {{ if .IsEdit }}
+        <input type="hidden" name="_method" value="PUT">
+        {{ end }}
+
+        <div class="mb-4">
+            <label for="name" class="block text-gray-700 text-sm font-bold mb-2">Nama Penerima / Alamat:</label>
+            <input type="text" id="name" name="name" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" value="{{ if .AddressData }}{{ .AddressData.Name }}{{ end }}" required>
+        </div>
+
+        <div class="mb-4">
+            <label for="phone" class="block text-gray-700 text-sm font-bold mb-2">Nomor Telepon:</label>
+            <input type="tel" id="phone" name="phone" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" value="{{ if .AddressData }}{{ .AddressData.Phone }}{{ end }}" required>
+        </div>
+
+        <div class="mb-4">
+            <label for="email" class="block text-gray-700 text-sm font-bold mb-2">Email:</label>
+            <input type="email" id="email" name="email" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" value="{{ if .AddressData }}{{ .AddressData.Email }}{{ end }}" required>
+        </div>
+
+        <div class="mb-4">
+            <label for="address1" class="block text-gray-700 text-sm font-bold mb-2">Alamat Lengkap (Baris 1):</label>
+            <input type="text" id="address1" name="address1" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" value="{{ if .AddressData }}{{ .AddressData.Address1 }}{{ end }}" required>
+        </div>
+
+        <div class="mb-4">
+            <label for="address2" class="block text-gray-700 text-sm font-bold mb-2">Alamat (Baris 2) - Opsional:</label>
+            <input type="text" id="address2" name="address2" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" value="{{ if .AddressData }}{{ .AddressData.Address2 }}{{ end }}">
+        </div>
+
+       <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+        <div>
+            <label for="province_id" class="block text-gray-700 text-sm font-bold mb-2">Provinsi:</label>
+                <select id="province_id" name="province_id" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" required>
+                    <option value="">Pilih Provinsi</option>
+                    {{ range .Provinces }}  <option value="{{ .ID }}" {{ if $.AddressData }}{{ if eq $.AddressData.ProvinceID .ID }}selected{{ end }}{{ end }}>
+                        {{ .Name }}
+                    </option>
+                    {{ end }}
+                </select>
+            </div>
+            <div>
+                <label for="city_id" class="block text-gray-700 text-sm font-bold mb-2">Kota:</label>
+                <select id="city_id" name="city_id" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" required>
+                    <option value="">Pilih Kota</option>
+                    {{ if .AddressData }}
+                        {{ if .AddressData.ProvinceID }}
+                            <option value="{{ .AddressData.CityID }}" selected>{{ .AddressData.CityName }}</option>
+                        {{ end }}
+                    {{ else }}
+                        <option value="" selected>Pilih Kota</option>
+                    {{ end }}
+                </select>
+        </div>
+    </div>
+
+        <div class="mb-6">
+            <label for="post_code" class="block text-gray-700 text-sm font-bold mb-2">Kode Pos:</label>
+            <input type="text" id="post_code" name="post_code" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" value="{{ if .AddressData }}{{ .AddressData.PostCode }}{{ end }}" required>
+        </div>
+
+        <div class="mb-6 flex items-center">
+            <input type="checkbox" id="is_primary" name="is_primary" class="form-checkbox h-5 w-5 text-blue-600 rounded"
+            {{ if .AddressData }} {{ if .AddressData.IsPrimary }}checked{{ end }} {{ end }}>
+            <label for="is_primary" class="ml-2 text-gray-700">Jadikan Alamat Utama</label>
+        </div>
+
+        <div class="flex items-center justify-between">
+            <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-300 focus:outline-none focus:shadow-outline">
+                {{ if .IsEdit }}Perbarui Alamat{{ else }}Simpan Alamat{{ end }}
+            </button>
+            <a href="/addresses" class="inline-block align-baseline font-bold text-sm text-gray-600 hover:text-gray-800">
+                Batal
+            </a>
+        </div>
+    </form>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const provinceSelect = document.getElementById('province_id');
+    const citySelect = document.getElementById('city_id');
+
+    if (provinceSelect && citySelect) {
+        const loadCities = (provinceId, selectedCityId = null) => {
+            citySelect.innerHTML = '<option value="">Memuat kota...</option>'; 
+            citySelect.disabled = true;
+
+            if (provinceId) {
+                fetch(`/cities?province_id=${provinceId}`)
+                    .then(response => {
+                        if (!response.ok) {
+                            console.error('HTTP Error:', response.status, response.statusText);
+                            return response.json().then(err => { throw new Error(err.error || 'Server error'); });
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        if (data && data.cities) {
+                            citySelect.innerHTML = '<option value="">Pilih Kota</option>';
+                            data.cities.forEach(city => {
+                                const option = document.createElement('option');
+                                option.value = city.city_id;   
+                                option.textContent = city.city_name; 
+                                if (selectedCityId && String(city.city_id) === String(selectedCityId)) {
+                                    option.selected = true;
+                                }
+                                citySelect.appendChild(option);
+                            });
+                        } else {
+                            console.error('Format data kota tidak sesuai atau kosong:', data);
+                            citySelect.innerHTML = '<option value="">Gagal memuat kota</option>';
+                        }
+                        citySelect.disabled = false;
+                    })
+                    .catch(error => {
+                        console.error('Ada masalah dengan operasi fetch:', error);
+                        citySelect.innerHTML = '<option value="">Gagal memuat kota</option>';
+                        citySelect.disabled = false;
+                    });
+            } else {
+                citySelect.innerHTML = '<option value="">Pilih Provinsi Dahulu</option>';
+                citySelect.disabled = false;
+            }
+        };
+
+        provinceSelect.addEventListener('change', function() {
+            loadCities(this.value);
+        });
+
+        const initialProvinceId = provinceSelect.value;
+        const initialCityId = "{{ if .AddressData }}{{ .AddressData.CityID }}{{ end }}"; 
+
+        if (initialProvinceId) {
+            loadCities(initialProvinceId, initialCityId);
+        }
+    }
+});
+</script>
+{{ end }}
+

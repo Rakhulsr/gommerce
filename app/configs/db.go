@@ -23,8 +23,6 @@ func OpenConnection() (*gorm.DB, error) {
 		return nil, fmt.Errorf("Failed To Connect To The Database: %v", err)
 	}
 
-	fmt.Println("DB is successfully connect")
-
 	return db, nil
 
 }
