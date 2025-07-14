@@ -29,12 +29,6 @@ type ENV struct {
 }
 
 func LoadEnv() ENV {
-	// cwd, err := os.Getwd()
-	// if err != nil {
-	// 	log.Fatalf("Failed to get current DIR : %v", err)
-	// }
-
-	// fmt.Printf("Current DIR is : %s\n", cwd)
 
 	if err := godotenv.Load(".env"); err != nil {
 		log.Println("Warning: No .env file found ")

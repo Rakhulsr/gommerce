@@ -6,6 +6,7 @@ import (
 
 	"github.com/Rakhulsr/go-ecommerce/app/helpers"
 	"github.com/Rakhulsr/go-ecommerce/app/models"
+	"github.com/Rakhulsr/go-ecommerce/app/models/other"
 	"github.com/Rakhulsr/go-ecommerce/app/repositories"
 	"github.com/Rakhulsr/go-ecommerce/app/utils/breadcrumb"
 	"github.com/gorilla/mux"
@@ -20,6 +21,28 @@ type ProductHandler struct {
 
 func NewProductHandler(p repositories.ProductRepositoryImpl, c repositories.CategoryRepositoryImpl, r *render.Render) *ProductHandler {
 	return &ProductHandler{p, c, r}
+}
+
+type ProductDetailPageData struct {
+	BaseData      other.BasePageData
+	Product       models.Product
+	Price         float64
+	Breadcrumbs   []breadcrumb.Breadcrumb
+	MessageStatus string
+	Message       string
+}
+
+type ProductListPageData struct {
+	BaseData        other.BasePageData
+	Title           string
+	Products        []models.Product
+	Categories      []models.Category
+	CurrentPage     int
+	TotalPages      int
+	CategorySlug    string
+	SearchQuery     string
+	Breadcrumbs     []breadcrumb.Breadcrumb
+	CurrentCategory *models.Category
 }
 
 func (h *ProductHandler) Products(w http.ResponseWriter, r *http.Request) {
@@ -74,7 +97,7 @@ func (h *ProductHandler) Products(w http.ResponseWriter, r *http.Request) {
 		"totalPages":  int((total + int64(limit) - 1) / int64(limit)),
 		"category":    slug,
 		"searchQuery": query,
-		"breadcrumbs": breadcrumbs,
+		"Breadcrumbs": breadcrumbs,
 		"IsAuthPage":  false,
 	})
 
@@ -120,19 +143,14 @@ func (h *ProductHandler) ProductDetail(w http.ResponseWriter, r *http.Request) {
 
 	priceFloat, _ := product.Price.Float64()
 
-	status := r.URL.Query().Get("status")
-	message := r.URL.Query().Get("message")
-
 	dataMap := map[string]interface{}{
-		"title":         product.Name,
-		"product":       product,
-		"price":         priceFloat,
-		"breadcrumbs":   breadcrumbs,
-		"MessageStatus": status,
-		"Message":       message,
+		"title":       product.Name,
+		"product":     *product,
+		"price":       priceFloat,
+		"Breadcrumbs": breadcrumbs,
 	}
 
-	datas := helpers.GetBaseData(r, dataMap)
+	data := helpers.GetBaseData(r, dataMap)
 
-	_ = h.render.HTML(w, http.StatusOK, "product", datas)
+	_ = h.render.HTML(w, http.StatusOK, "product", data)
 }

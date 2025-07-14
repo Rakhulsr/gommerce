@@ -27,7 +27,7 @@ func AdminAuthMiddleware(userRepo repositories.UserRepositoryImpl) func(http.Han
 				return
 			}
 
-			if user.Role != "admin" { // Pastikan field dan nilai role sesuai
+			if user.Role != "admin" {
 				log.Printf("AdminAuthMiddleware: User %s (%s) attempted to access admin panel without admin role.", user.ID, user.Email)
 				http.Redirect(w, r, "/?status=error&message="+url.QueryEscape("Anda tidak memiliki izin untuk mengakses halaman ini."), http.StatusForbidden)
 				return

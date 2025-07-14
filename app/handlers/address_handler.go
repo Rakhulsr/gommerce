@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/Rakhulsr/go-ecommerce/app/helpers"
-	"github.com/Rakhulsr/go-ecommerce/app/models" // Pastikan models diimpor
+	"github.com/Rakhulsr/go-ecommerce/app/models"
 	"github.com/Rakhulsr/go-ecommerce/app/models/other"
 	"github.com/Rakhulsr/go-ecommerce/app/repositories"
 	"github.com/Rakhulsr/go-ecommerce/app/services"
@@ -67,9 +67,8 @@ type AddressForm struct {
 	Address2   string `form:"address2"`
 	ProvinceID string `form:"province_id" validate:"required"`
 	CityID     string `form:"city_id" validate:"required"`
-	CityName   string // Field baru untuk menyimpan nama kota di form
+	CityName   string
 	PostCode   string `form:"post_code" validate:"required,numeric"`
-	IsPrimary  bool   `form:"is_primary"`
 }
 
 func (h *AddressHandler) populateBaseData(r *http.Request, pageData *AddressPageData) {
@@ -81,11 +80,11 @@ func (h *AddressHandler) populateBaseData(r *http.Request, pageData *AddressPage
 	if isLoggedIn, ok := baseDataMap["IsLoggedIn"].(bool); ok {
 		pageData.IsLoggedIn = isLoggedIn
 	}
-	// === PERBAIKAN DI SINI: Cast ke *other.UserForTemplate ===
+
 	if user, ok := baseDataMap["User"].(*other.UserForTemplate); ok {
 		pageData.User = user
 	}
-	// === AKHIR PERBAIKAN ===
+
 	if userID, ok := baseDataMap["UserID"].(string); ok {
 		pageData.UserID = userID
 	}
@@ -104,17 +103,18 @@ func (h *AddressHandler) populateBaseData(r *http.Request, pageData *AddressPage
 	if query, ok := baseDataMap["Query"].(url.Values); ok {
 		pageData.Query = query
 	}
-	if breadcrumbs, ok := baseDataMap["breadcrumbs"].([]breadcrumb.Breadcrumb); ok {
+	if breadcrumbs, ok := baseDataMap["Breadcrumbs"].([]breadcrumb.Breadcrumb); ok {
 		pageData.Breadcrumbs = breadcrumbs
 	}
 	if isAuthPage, ok := baseDataMap["IsAuthPage"].(bool); ok {
 		pageData.IsAuthPage = isAuthPage
 	}
-	// Ambil IsAdminPage dari baseDataMap jika digunakan di BasePageData
+
 	if isAdminPage, ok := baseDataMap["IsAdminPage"].(bool); ok {
 		pageData.IsAdminPage = isAdminPage
 	}
 }
+
 func (h *AddressHandler) GetAddressesPage(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	userID := ctx.Value(helpers.ContextKeyUserID).(string)
@@ -122,13 +122,12 @@ func (h *AddressHandler) GetAddressesPage(w http.ResponseWriter, r *http.Request
 	addresses, err := h.addressRepo.FindAddressesByUserID(ctx, userID)
 	if err != nil {
 		log.Printf("GetAddressesPage: Failed to retrieve addresses for user %s: %v", userID, err)
-
-		errorDataMap := helpers.GetBaseData(r, map[string]interface{}{
-			"Title":         "Error",
-			"Message":       "Gagal mengambil daftar alamat.",
-			"MessageStatus": "error",
-		})
-		h.render.HTML(w, http.StatusInternalServerError, "error", errorDataMap)
+		data := AddressPageData{}
+		h.populateBaseData(r, &data)
+		data.Message = "Gagal mengambil daftar alamat."
+		data.MessageStatus = "error"
+		data.Title = "Error"
+		h.render.HTML(w, http.StatusInternalServerError, "error", data)
 		return
 	}
 
@@ -136,6 +135,7 @@ func (h *AddressHandler) GetAddressesPage(w http.ResponseWriter, r *http.Request
 	allProvinces, err := h.rajaOngkirSvc.GetProvincesFromAPI()
 	if err != nil {
 		log.Printf("GetAddressesPage: Error fetching all provinces from RajaOngkir: %v", err)
+
 	}
 	provinceMap := make(map[string]string)
 	for _, p := range allProvinces {
@@ -154,10 +154,10 @@ func (h *AddressHandler) GetAddressesPage(w http.ResponseWriter, r *http.Request
 		}
 
 		var citiesInProvince []other.City
-		var found bool
+		var foundCity bool
 		if cachedCities, ok := citiesCache[addr.ProvinceID]; ok {
 			citiesInProvince = cachedCities
-			found = true
+			foundCity = true
 		} else {
 			c, cErr := h.rajaOngkirSvc.GetCitiesFromAPI(addr.ProvinceID)
 			if cErr != nil {
@@ -166,11 +166,11 @@ func (h *AddressHandler) GetAddressesPage(w http.ResponseWriter, r *http.Request
 			} else {
 				citiesInProvince = c
 				citiesCache[addr.ProvinceID] = c
-				found = true
+				foundCity = true
 			}
 		}
 
-		if found {
+		if foundCity {
 			for _, city := range citiesInProvince {
 				if city.ID == addr.CityID {
 					addressesWithNames[i].CityName = city.Name
@@ -193,6 +193,7 @@ func (h *AddressHandler) GetAddressesPage(w http.ResponseWriter, r *http.Request
 	data.Title = "Daftar Alamat Saya"
 	data.Breadcrumbs = []breadcrumb.Breadcrumb{
 		{Name: "Beranda", URL: "/"},
+		{Name: "Profile", URL: "/profile"},
 		{Name: "Alamat Saya", URL: "/addresses"},
 	}
 	data.IsAuthPage = true
@@ -213,12 +214,14 @@ func (h *AddressHandler) AddAddressPage(w http.ResponseWriter, r *http.Request) 
 		AddressData: nil,
 		Provinces:   provinces,
 		Cities:      []other.City{},
+		Errors:      make(map[string]string),
 	}
 	h.populateBaseData(r, &data)
 
 	data.Title = "Tambah Alamat Baru"
 	data.Breadcrumbs = []breadcrumb.Breadcrumb{
 		{Name: "Beranda", URL: "/"},
+		{Name: "Profile ", URL: "/profile"},
 		{Name: "Alamat Saya", URL: "/addresses"},
 		{Name: "Tambah Baru", URL: "/addresses/add"},
 	}
@@ -238,19 +241,21 @@ func (h *AddressHandler) AddAddressPost(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	form.Name = r.FormValue("name")
-	form.Phone = r.FormValue("phone")
-	form.Email = r.FormValue("email")
-	form.Address1 = r.FormValue("address1")
-	form.Address2 = r.FormValue("address2")
-	form.ProvinceID = r.FormValue("province_id")
-	form.CityID = r.FormValue("city_id")
-	form.PostCode = r.FormValue("post_code")
-	form.IsPrimary = r.FormValue("is_primary") == "on"
+	form.Name = r.PostFormValue("name")
+	form.Phone = r.PostFormValue("phone")
+	form.Email = r.PostFormValue("email")
+	form.Address1 = r.PostFormValue("address1")
+	form.Address2 = r.PostFormValue("address2")
+	form.ProvinceID = r.PostFormValue("province_id")
+	form.CityID = r.PostFormValue("city_id")
+	form.PostCode = r.PostFormValue("post_code")
+
+	log.Printf("AddAddressPost: Form received - Name: %s, Phone: %s, Email: %s, ProvinceID: %s, CityID: %s, PostCode: %s, IsPrimary: %t",
+		form.Name, form.Phone, form.Email, form.ProvinceID, form.CityID, form.PostCode)
 
 	if err := h.validator.Struct(&form); err != nil {
 		validationErrors := err.(validator.ValidationErrors)
-		errMsg := helpers.TranslateValidationErrors(validationErrors)
+		formattedErrors := helpers.FormatValidationErrors(validationErrors)
 
 		provinces, pErr := h.rajaOngkirSvc.GetProvincesFromAPI()
 		if pErr != nil {
@@ -274,7 +279,7 @@ func (h *AddressHandler) AddAddressPost(w http.ResponseWriter, r *http.Request) 
 				}
 			}
 		}
-		form.CityName = currentCityName // Set CityName di form
+		form.CityName = currentCityName
 
 		data := AddressPageData{
 			FormAction:  "/addresses/add",
@@ -282,16 +287,17 @@ func (h *AddressHandler) AddAddressPost(w http.ResponseWriter, r *http.Request) 
 			AddressData: &form,
 			Provinces:   provinces,
 			Cities:      cities,
+			Errors:      formattedErrors,
 		}
 		h.populateBaseData(r, &data)
 
 		data.Title = "Tambah Alamat Baru"
 		data.Breadcrumbs = []breadcrumb.Breadcrumb{
 			{Name: "Beranda", URL: "/"},
+			{Name: "Profile", URL: "/profile"},
 			{Name: "Alamat Saya", URL: "/addresses"},
 			{Name: "Tambah Baru", URL: "/addresses/add"},
 		}
-		data.Query = url.Values{"status": {"error"}, "message": {errMsg}}
 		data.IsAuthPage = true
 
 		h.render.HTML(w, http.StatusOK, "auth/addresses_form", data)
@@ -308,15 +314,15 @@ func (h *AddressHandler) AddAddressPost(w http.ResponseWriter, r *http.Request) 
 		ProvinceID: form.ProvinceID,
 		CityID:     form.CityID,
 		PostCode:   form.PostCode,
-		IsPrimary:  form.IsPrimary,
-		CreatedAt:  time.Now(),
-		UpdatedAt:  time.Now(),
+
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
 	}
 
 	err := h.addressRepo.CreateAddress(ctx, address)
 	if err != nil {
 		log.Printf("AddAddressPost: Failed to create address for user %s: %v", userID, err)
-		http.Redirect(w, r, fmt.Sprintf("/addresses/add?status=error&message=%s", url.QueryEscape("Gagal menambahkan alamat.")), http.StatusSeeOther)
+		http.Redirect(w, r, fmt.Sprintf("/addresses/add?status=error&message=%s", url.QueryEscape("Gagal menambahkan alamat: "+err.Error())), http.StatusSeeOther)
 		return
 	}
 
@@ -373,9 +379,8 @@ func (h *AddressHandler) EditAddressPage(w http.ResponseWriter, r *http.Request)
 		Address2:   address.Address2,
 		ProvinceID: address.ProvinceID,
 		CityID:     address.CityID,
-		CityName:   currentCityName, // Set CityName di form
+		CityName:   currentCityName,
 		PostCode:   address.PostCode,
-		IsPrimary:  address.IsPrimary,
 	}
 
 	data := AddressPageData{
@@ -384,12 +389,14 @@ func (h *AddressHandler) EditAddressPage(w http.ResponseWriter, r *http.Request)
 		AddressData: &formData,
 		Provinces:   provinces,
 		Cities:      cities,
+		Errors:      make(map[string]string),
 	}
 	h.populateBaseData(r, &data)
 
 	data.Title = "Edit Alamat"
 	data.Breadcrumbs = []breadcrumb.Breadcrumb{
 		{Name: "Beranda", URL: "/"},
+		{Name: "Profile", URL: "/profile"},
 		{Name: "Alamat Saya", URL: "/addresses"},
 		{Name: "Edit Alamat", URL: fmt.Sprintf("/addresses/edit/%s", addressID)},
 	}
@@ -424,19 +431,21 @@ func (h *AddressHandler) EditAddressPost(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	form.Name = r.FormValue("name")
-	form.Phone = r.FormValue("phone")
-	form.Email = r.FormValue("email")
-	form.Address1 = r.FormValue("address1")
-	form.Address2 = r.FormValue("address2")
-	form.ProvinceID = r.FormValue("province_id")
-	form.CityID = r.FormValue("city_id")
-	form.PostCode = r.FormValue("post_code")
-	form.IsPrimary = r.FormValue("is_primary") == "on"
+	form.Name = r.PostFormValue("name")
+	form.Phone = r.PostFormValue("phone")
+	form.Email = r.PostFormValue("email")
+	form.Address1 = r.PostFormValue("address1")
+	form.Address2 = r.PostFormValue("address2")
+	form.ProvinceID = r.PostFormValue("province_id")
+	form.CityID = r.PostFormValue("city_id")
+	form.PostCode = r.PostFormValue("post_code")
+
+	log.Printf("EditAddressPost: Form received - Name: %s, Phone: %s, Email: %s, ProvinceID: %s, CityID: %s, PostCode: %s, IsPrimary: %t",
+		form.Name, form.Phone, form.Email, form.ProvinceID, form.CityID, form.PostCode)
 
 	if err := h.validator.Struct(&form); err != nil {
 		validationErrors := err.(validator.ValidationErrors)
-		errMsg := helpers.TranslateValidationErrors(validationErrors)
+		formattedErrors := helpers.FormatValidationErrors(validationErrors)
 
 		provinces, pErr := h.rajaOngkirSvc.GetProvincesFromAPI()
 		if pErr != nil {
@@ -460,7 +469,7 @@ func (h *AddressHandler) EditAddressPost(w http.ResponseWriter, r *http.Request)
 				}
 			}
 		}
-		form.CityName = currentCityName // Set CityName di form
+		form.CityName = currentCityName
 
 		data := AddressPageData{
 			FormAction:  fmt.Sprintf("/addresses/edit/%s", addressID),
@@ -468,16 +477,17 @@ func (h *AddressHandler) EditAddressPost(w http.ResponseWriter, r *http.Request)
 			AddressData: &form,
 			Provinces:   provinces,
 			Cities:      cities,
+			Errors:      formattedErrors,
 		}
 		h.populateBaseData(r, &data)
 
 		data.Title = "Edit Alamat"
 		data.Breadcrumbs = []breadcrumb.Breadcrumb{
 			{Name: "Beranda", URL: "/"},
+			{Name: "Profile", URL: "/profile"},
 			{Name: "Alamat Saya", URL: "/addresses"},
 			{Name: "Edit Alamat", URL: fmt.Sprintf("/addresses/edit/%s", addressID)},
 		}
-		data.Query = url.Values{"status": {"error"}, "message": {errMsg}}
 		data.IsAuthPage = true
 
 		h.render.HTML(w, http.StatusOK, "auth/addresses_form", data)
@@ -492,13 +502,13 @@ func (h *AddressHandler) EditAddressPost(w http.ResponseWriter, r *http.Request)
 	address.ProvinceID = form.ProvinceID
 	address.CityID = form.CityID
 	address.PostCode = form.PostCode
-	address.IsPrimary = form.IsPrimary
+
 	address.UpdatedAt = time.Now()
 
 	err = h.addressRepo.UpdateAddress(ctx, address)
 	if err != nil {
 		log.Printf("EditAddressPost: Failed to update address %s for user %s: %v", addressID, userID, err)
-		http.Redirect(w, r, fmt.Sprintf("/addresses/edit/%s?status=error&message=%s", addressID, url.QueryEscape("Gagal memperbarui alamat.")), http.StatusSeeOther)
+		http.Redirect(w, r, fmt.Sprintf("/addresses/edit/%s?status=error&message=%s", addressID, url.QueryEscape("Gagal memperbarui alamat: "+err.Error())), http.StatusSeeOther)
 		return
 	}
 
@@ -554,7 +564,6 @@ func (h *AddressHandler) SetPrimaryAddressPost(w http.ResponseWriter, r *http.Re
 }
 
 func (h *AddressHandler) GetCitiesByProvinceIDAPI(w http.ResponseWriter, r *http.Request) {
-
 	provinceID := r.URL.Query().Get("province_id")
 	log.Printf("GetCitiesByProvinceIDAPI: Received request for province_id: %s", provinceID)
 

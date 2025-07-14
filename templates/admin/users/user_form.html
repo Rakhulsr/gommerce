@@ -1,0 +1,83 @@
+{{ define "admin/users/form" }}
+<div class="flex min-h-screen bg-gray-100">
+    {{ template "admin_sidebar" . }}
+
+    <div class="flex-1 px-6 py-8">
+        <div class="flex justify-between items-center mb-6">
+            <h1 class="text-3xl font-bold text-gray-800">{{ if .IsEdit }}Edit Pengguna{{ else }}Tambah Pengguna Baru{{ end }}</h1>
+        </div>
+
+        {{ if .Message }}
+        <div id="flash-message" class="mb-4 p-4 rounded-lg relative flex items-center justify-between shadow-sm
+            {{ if eq .MessageStatus "success" }} bg-green-50 border border-green-300 text-green-800
+            {{ else if eq .MessageStatus "error" }} bg-red-50 border border-red-300 text-red-800
+            {{ else if eq .MessageStatus "warning" }} bg-yellow-50 border border-yellow-300 text-yellow-800
+            {{ else }} bg-blue-50 border border-blue-300 text-blue-800
+            {{ end }}">
+            <span>{{ .Message }}</span>
+            <button type="button" class="ml-4 text-gray-700 hover:text-gray-900 focus:outline-none" onclick="this.parentElement.remove()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        {{ end }}
+
+        <div class="bg-white shadow-xl rounded-lg p-6 border border-gray-100">
+            <form action="{{ .FormAction }}" method="POST">
+                {{ if .IsEdit }}
+                <input type="hidden" name="_method" value="PUT">
+                <input type="hidden" name="id" value="{{ .UserData.ID }}">
+                {{ end }}
+
+                <div class="mb-4">
+                    <label for="first_name" class="block text-sm font-medium text-gray-700">Nama Depan</label>
+                    <input type="text" name="first_name" id="first_name" value="{{ .UserData.FirstName }}"
+                           class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm">
+                    {{ with .Errors.first_name }}<p class="text-red-500 text-xs mt-1">{{ . }}</p>{{ end }}
+                </div>
+
+                <div class="mb-4">
+                    <label for="last_name" class="block text-sm font-medium text-gray-700">Nama Belakang</label>
+                    <input type="text" name="last_name" id="last_name" value="{{ .UserData.LastName }}"
+                           class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm">
+                    {{ with .Errors.last_name }}<p class="text-red-500 text-xs mt-1">{{ . }}</p>{{ end }}
+                </div>
+
+                <div class="mb-4">
+                    <label for="email" class="block text-sm font-medium text-gray-700">Email</label>
+                    <input type="email" name="email" id="email" value="{{ .UserData.Email }}"
+                           class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm">
+                    {{ with .Errors.email }}<p class="text-red-500 text-xs mt-1">{{ . }}</p>{{ end }}
+                </div>
+
+                <div class="mb-4">
+                    <label for="password" class="block text-sm font-medium text-gray-700">Password {{ if .IsEdit }}(Kosongkan jika tidak diubah){{ end }}</label>
+                    <input type="password" name="password" id="password"
+                           class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm">
+                    {{ with .Errors.password }}<p class="text-red-500 text-xs mt-1">{{ . }}</p>{{ end }}
+                </div>
+
+                <div class="mb-4">
+                    <label for="role" class="block text-sm font-medium text-gray-700">Role</label>
+                    <select name="role" id="role"
+                            class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm">
+                        <option value="customer" {{ if eq .UserData.Role "customer" }}selected{{ end }}>Customer</option>
+                        <option value="admin" {{ if eq .UserData.Role "admin" }}selected{{ end }}>Admin</option>
+                    </select>
+                    {{ with .Errors.role }}<p class="text-red-500 text-xs mt-1">{{ . }}</p>{{ end }}
+                </div>
+
+                
+
+                <div class="flex justify-end gap-3">
+                    <a href="/admin/users" class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                        Batal
+                    </a>
+                    <button type="submit" class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500">
+                        {{ if .IsEdit }}Perbarui Pengguna{{ else }}Tambah Pengguna{{ end }}
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{{ end }}

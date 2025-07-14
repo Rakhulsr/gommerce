@@ -73,8 +73,7 @@ func GenerateAndPrintSessionKeys() error {
 	fmt.Printf("APP_ENC_KEY=%s\n", encKeyBase64)
 	fmt.Println("================================================")
 
-	// --- NEW PART: Write directly to a file ---
-	envFilePath := ".env.new_keys" // Atau nama file lain
+	envFilePath := ".env.new_keys"
 	fullPath, err := filepath.Abs(envFilePath)
 	if err != nil {
 		return fmt.Errorf("failed to get absolute path for %s: %w", envFilePath, err)
@@ -95,7 +94,7 @@ func GenerateAndPrintSessionKeys() error {
 	fmt.Println("Please copy these lines from that file into your actual .env file.")
 	fmt.Println("REMINDER: Store these keys securely and only generate them ONCE for your production environment.")
 	fmt.Println("If you regenerate, existing user sessions will be invalidated.")
-	// --- END NEW PART ---
+
 	fmt.Printf("fullpath: %s", fullPath)
 
 	return nil

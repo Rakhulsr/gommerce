@@ -99,7 +99,7 @@ document.addEventListener('DOMContentLoaded', function() {
     function setShippingMessage(message, type = '') {
         elements.shippingMessage.textContent = message;
         elements.shippingMessage.className = 'text-sm mt-2';
-        // Hapus semua kelas warna sebelumnya
+        
         elements.shippingMessage.classList.remove('text-red-500', 'text-yellow-500', 'text-green-500');
         if (type === 'error') {
             elements.shippingMessage.classList.add('text-red-500');
@@ -153,7 +153,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         if (!provinceId) {
             setShippingMessage('Mohon pilih Provinsi terlebih dahulu.', 'warning');
-            resetShippingElements({ resetCity: true, resetCourier: true, resetShippingFee: true }); // Reset kurir juga jika provinsi kosong
+            resetShippingElements({ resetCity: true, resetCourier: true, resetShippingFee: true }); 
             return;
         }
 
@@ -274,9 +274,9 @@ document.addEventListener('DOMContentLoaded', function() {
     resetShippingElements({ resetCity: true, resetCourier: true, resetShippingFee: true });
     updateGrandTotalDisplay(0);
 
-    // Logika untuk mengisi dropdown berdasarkan nilai yang mungkin sudah ada (misal dari refresh halaman)
+    
     if (elements.provinceSelect.value) {
-        // Jika provinsi sudah dipilih, muat kota dan kemudian cek kondisi kurir/ongkir
+        
         loadCities(elements.provinceSelect.value).then(() => {
             if (elements.citySelect.value && elements.courierSelect.value) {
                 loadShippingCosts();
@@ -287,21 +287,21 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     } else {
-        // Jika tidak ada provinsi yang terpilih, pastikan kurir dan ongkir disabled.
+        
         elements.courierSelect.disabled = true;
         elements.shippingFeeSelect.disabled = true;
         setShippingMessage('Mohon pilih Provinsi terlebih dahulu untuk melihat opsi pengiriman.', 'warning');
     }
 
-    // --- 5. EVENT LISTENERS ---
+    
 
     elements.provinceSelect.addEventListener('change', function() {
         const selectedProvinceId = this.value;
 
-        // Reset semua elemen terkait pengiriman: kota, kurir, biaya pengiriman.
-        // Opsi kurir akan tetap ada di DOM, tetapi nilai terpilihnya di-reset dan elemennya di-disable.
+        
+        
         resetShippingElements({ resetCity: true, resetCourier: true, resetShippingFee: true });
-        loadCities(selectedProvinceId); // Ini akan mengaktifkan kembali courierSelect jika berhasil
+        loadCities(selectedProvinceId); 
 
         if (!selectedProvinceId) {
             setShippingMessage('Mohon pilih Provinsi terlebih dahulu untuk melihat opsi pengiriman.', 'warning');
@@ -313,7 +313,7 @@ document.addEventListener('DOMContentLoaded', function() {
     elements.citySelect.addEventListener('change', function() {
         const selectedCityId = this.value;
         if (selectedCityId) {
-            elements.courierSelect.disabled = false; // Aktifkan kurir jika kota dipilih
+            elements.courierSelect.disabled = false; 
             if (elements.courierSelect.value) {
                 loadShippingCosts();
             } else {
@@ -321,7 +321,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 resetShippingElements({ resetCity: false, resetCourier: false, resetShippingFee: true });
             }
         } else {
-            // Kota tidak terpilih, reset kurir dan biaya pengiriman.
+            
             resetShippingElements({ resetCity: false, resetCourier: true, resetShippingFee: true });
             setShippingMessage('Mohon pilih Kota/Kabupaten.', 'warning');
         }
@@ -379,18 +379,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
         console.log('Semua input pengiriman valid. Siap untuk Checkout!');
         setShippingMessage('Semua siap untuk checkout!', 'success');
-        // If all validation passes, you can proceed with form submission or navigation.
-        // elements.calculateShippingForm.submit(); // Anda bisa mengaktifkan ini jika ini adalah form submit
-        // window.location.href = '/checkout-page'; // Atau ini untuk navigasi
+       
     });
 
-    document.querySelectorAll('.delete-confirm-form').forEach(form => {
-        form.addEventListener('submit', function(event) {
-            if (!confirm('Apakah Anda yakin ingin menghapus item ini dari keranjang?')) {
-                event.preventDefault();
-            }
-        });
-    });
 
     const updateSuccessNotification = document.getElementById('update-success-notification');
     if (updateSuccessNotification) {

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
-	"time" // Import time
+	"time"
 
 	"github.com/Rakhulsr/go-ecommerce/app/models"
 	"github.com/google/uuid"
@@ -13,7 +13,6 @@ import (
 	"gorm.io/gorm"
 )
 
-// UserRepositoryImpl adalah interface untuk operasi user repository.
 type UserRepositoryImpl interface {
 	Create(ctx context.Context, user *models.User) error
 	FindByID(ctx context.Context, id string) (*models.User, error)
@@ -21,11 +20,15 @@ type UserRepositoryImpl interface {
 	Update(ctx context.Context, user *models.User) error
 	UpdateRememberToken(ctx context.Context, userID string, selector string, verifierRaw string) error
 	FindByRememberToken(ctx context.Context, tokenFromCookie string) (*models.User, error)
-	// --- Tambahan untuk Forgot Password ---
+
 	SavePasswordResetToken(ctx context.Context, userID string, token *string, expiresAt *time.Time) error
 	FindByPasswordResetToken(ctx context.Context, token string) (*models.User, error)
 	ClearPasswordResetToken(ctx context.Context, userID string) error
 	UpdatePassword(ctx context.Context, userID string, newPasswordHash string) error
+
+	GetAllUsers(ctx context.Context) ([]models.User, error)
+	UpdateUser(ctx context.Context, user *models.User) error
+	DeleteUser(ctx context.Context, id string) error
 }
 
 type userRepository struct {
@@ -52,10 +55,9 @@ func (r *userRepository) Create(ctx context.Context, user *models.User) error {
 		user.Role = models.RoleCustomer
 	}
 
-	// Pastikan ini disetel ke nil untuk user baru
 	user.RememberTokenSelector = nil
 	user.RememberTokenHash = ""
-	// Pastikan juga token reset password disetel ke nil untuk user baru
+
 	user.PasswordResetToken = nil
 	user.PasswordResetExpires = nil
 
@@ -91,15 +93,15 @@ func (r *userRepository) Update(ctx context.Context, user *models.User) error {
 }
 
 func (r *userRepository) UpdateRememberToken(ctx context.Context, userID string, selector string, verifierRaw string) error {
-	// Menggunakan Updates dengan map untuk mengontrol nilai NULL
+
 	updates := map[string]interface{}{
-		"remember_token_hash": string(verifierRaw), // verifierRaw sudah di-hash di handler atau di tempat lain jika tidak, hash di sini
+		"remember_token_hash": string(verifierRaw),
 		"updated_at":          time.Now(),
 	}
 	if selector == "" {
 		updates["remember_token_selector"] = nil
 	} else {
-		updates["remember_token_selector"] = &selector // Simpan sebagai pointer ke string
+		updates["remember_token_selector"] = &selector
 	}
 
 	result := r.db.WithContext(ctx).Model(&models.User{}).Where("id = ?", userID).Updates(updates)
@@ -116,32 +118,26 @@ func (r *userRepository) FindByRememberToken(ctx context.Context, tokenFromCooki
 	}
 
 	selector := parts[0]
-	verifierRaw := parts[1] // Ini adalah verifier mentah dari cookie
+	verifierRaw := parts[1]
 
 	var user models.User
 
-	// Cari user berdasarkan selector
 	err := r.db.WithContext(ctx).Where("remember_token_selector = ?", selector).First(&user).Error
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
-			return nil, nil // Selector tidak ditemukan
+			return nil, nil
 		}
 		return nil, err
 	}
 
-	// Bandingkan verifier mentah dari cookie dengan hash yang disimpan
-	// Pastikan user.RememberTokenHash tidak kosong sebelum membandingkan
 	if user.RememberTokenHash == "" || bcrypt.CompareHashAndPassword([]byte(user.RememberTokenHash), []byte(verifierRaw)) != nil {
-		// Jika hash tidak cocok atau hash kosong, token tidak valid
+
 		return nil, nil
 	}
 
 	return &user, nil
 }
 
-// --- Metode Baru untuk Forgot Password ---
-
-// SavePasswordResetToken menyimpan token reset password ke database
 func (r *userRepository) SavePasswordResetToken(ctx context.Context, userID string, token *string, expiresAt *time.Time) error {
 	updates := map[string]interface{}{
 		"password_reset_token":   token,
@@ -157,7 +153,7 @@ func (r *userRepository) SavePasswordResetToken(ctx context.Context, userID stri
 
 func (r *userRepository) FindByPasswordResetToken(ctx context.Context, token string) (*models.User, error) {
 	var user models.User
-	// Cari token yang cocok dan belum kedaluwarsa
+
 	result := r.db.WithContext(ctx).Where("password_reset_token = ? AND password_reset_expires > ?", token, time.Now()).First(&user)
 	if result.Error != nil {
 		if result.Error == gorm.ErrRecordNotFound {
@@ -190,5 +186,33 @@ func (r *userRepository) UpdatePassword(ctx context.Context, userID string, newP
 	if result.Error != nil {
 		return fmt.Errorf("failed to update password for user %s: %w", userID, result.Error)
 	}
+	return nil
+}
+
+func (r *userRepository) GetAllUsers(ctx context.Context) ([]models.User, error) {
+	var users []models.User
+	if err := r.db.WithContext(ctx).Find(&users).Error; err != nil {
+		log.Printf("UserRepository.GetAllUsers: Error getting all users: %v", err)
+		return nil, fmt.Errorf("failed to get all users: %w", err)
+	}
+	return users, nil
+}
+
+func (r *userRepository) UpdateUser(ctx context.Context, user *models.User) error {
+	user.UpdatedAt = time.Now()
+	if err := r.db.WithContext(ctx).Save(user).Error; err != nil {
+		log.Printf("UserRepository.UpdateUser: Error updating user %s: %v", user.ID, err)
+		return fmt.Errorf("failed to update user: %w", err)
+	}
+	log.Printf("UserRepository.UpdateUser: User %s updated successfully.", user.ID)
+	return nil
+}
+
+func (r *userRepository) DeleteUser(ctx context.Context, id string) error {
+	if err := r.db.WithContext(ctx).Delete(&models.User{}, "id = ?", id).Error; err != nil {
+		log.Printf("UserRepository.DeleteUser: Error deleting user %s: %v", id, err)
+		return fmt.Errorf("failed to delete user: %w", err)
+	}
+	log.Printf("UserRepository.DeleteUser: User %s deleted successfully.", id)
 	return nil
 }

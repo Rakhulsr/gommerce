@@ -6,7 +6,8 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log"
-	"net/http" // Pastikan ini diimpor
+	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -54,23 +55,22 @@ func GetBaseData(r *http.Request, pageSpecificData map[string]interface{}) map[s
 	if _, exists := pageSpecificData["UserID"]; !exists {
 		pageSpecificData["UserID"] = ""
 	}
-	if _, exists := pageSpecificData["breadcrumbs"]; !exists {
-		pageSpecificData["breadcrumbs"] = []breadcrumb.Breadcrumb{}
+
+	if _, exists := pageSpecificData["Breadcrumbs"]; !exists {
+		pageSpecificData["Breadcrumbs"] = []breadcrumb.Breadcrumb{}
 	}
 	if _, exists := pageSpecificData["IsAuthPage"]; !exists {
 		pageSpecificData["IsAuthPage"] = false
 	}
-	// --- TAMBAHKAN INI UNTUK IsAdminPage jika digunakan di BasePageData ---
+
 	if _, exists := pageSpecificData["IsAdminPage"]; !exists {
 		pageSpecificData["IsAdminPage"] = false
 	}
-	// --- AKHIR TAMBAH ---
-	if _, exists := pageSpecificData["Message"]; !exists {
-		pageSpecificData["Message"] = ""
+
+	if _, exists := pageSpecificData["HideAdminWelcomeMessage"]; !exists {
+		pageSpecificData["HideAdminWelcomeMessage"] = false
 	}
-	if _, exists := pageSpecificData["MessageStatus"]; !exists {
-		pageSpecificData["MessageStatus"] = ""
-	}
+
 	if _, exists := pageSpecificData["Query"]; !exists {
 		pageSpecificData["Query"] = r.URL.Query()
 	}
@@ -110,35 +110,38 @@ func GetBaseData(r *http.Request, pageSpecificData map[string]interface{}) map[s
 
 	if status := r.URL.Query().Get("status"); status != "" {
 		pageSpecificData["MessageStatus"] = status
+	} else {
+		pageSpecificData["MessageStatus"] = ""
 	}
 	if msg := r.URL.Query().Get("message"); msg != "" {
 		pageSpecificData["Message"] = msg
+	} else {
+		pageSpecificData["Message"] = ""
 	}
 
 	return pageSpecificData
 }
 
-func TranslateValidationErrors(errs validator.ValidationErrors) string {
-	messages := make([]string, 0, len(errs))
+func FormatValidationErrors(errs validator.ValidationErrors) map[string]string {
+	errorMessages := make(map[string]string)
 	for _, err := range errs {
+		field := strings.ToLower(err.Field())
 		switch err.Tag() {
 		case "required":
-			messages = append(messages, fmt.Sprintf("%s tidak boleh kosong.", capitalizeFirstLetter(err.Field())))
+			errorMessages[field] = fmt.Sprintf("%s wajib diisi.", err.Field())
 		case "email":
-			messages = append(messages, fmt.Sprintf("%s harus berupa alamat email yang valid.", capitalizeFirstLetter(err.Field())))
+			errorMessages[field] = fmt.Sprintf("%s harus berupa alamat email yang valid.", err.Field())
 		case "numeric":
-			messages = append(messages, fmt.Sprintf("%s harus berisi angka.", capitalizeFirstLetter(err.Field())))
+			errorMessages[field] = fmt.Sprintf("%s harus berupa angka.", err.Field())
 		case "min":
-			messages = append(messages, fmt.Sprintf("%s minimal %s karakter.", capitalizeFirstLetter(err.Field()), err.Param()))
+			errorMessages[field] = fmt.Sprintf("%s minimal %s karakter/nilai.", err.Field(), err.Param())
 		case "max":
-			messages = append(messages, fmt.Sprintf("%s maksimal %s karakter.", capitalizeFirstLetter(err.Field()), err.Param()))
-		case "eqfield":
-			messages = append(messages, fmt.Sprintf("%s harus sama dengan %s.", capitalizeFirstLetter(err.Field()), capitalizeFirstLetter(err.Param())))
+			errorMessages[field] = fmt.Sprintf("%s maksimal %s karakter/nilai.", err.Field(), err.Param())
 		default:
-			messages = append(messages, fmt.Sprintf("%s tidak valid.", capitalizeFirstLetter(err.Field())))
+			errorMessages[field] = fmt.Sprintf("Validasi %s gagal pada field %s.", err.Tag(), err.Field())
 		}
 	}
-	return strings.Join(messages, ", ")
+	return errorMessages
 }
 
 func capitalizeFirstLetter(s string) string {
@@ -232,4 +235,12 @@ func HashPassword(password string) string {
 		return ""
 	}
 	return string(bytes)
+}
+
+func GenerateSlug(s string) string {
+	s = strings.ToLower(s)
+	reg := regexp.MustCompile("[^a-z0-9]+")
+	s = reg.ReplaceAllString(s, "-")
+	s = strings.Trim(s, "-")
+	return s
 }

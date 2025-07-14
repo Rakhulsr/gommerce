@@ -1,15 +1,21 @@
 package models
 
-import "time"
+import (
+	"time"
+
+	"gorm.io/gorm"
+)
 
 type Category struct {
-	ID        string `gorm:"size:36;not null;uniqueIndex;primary_key"`
-	ParentID  string `gorm:"size:36;"`
-	Section   Section
+	ID        string    `gorm:"size:36;not null;uniqueIndex;primary_key"`
+	Name      string    `gorm:"size:100;not null;uniqueIndex"`
+	Slug      string    `gorm:"size:100;not null;uniqueIndex"`
+	ParentID  *string   `gorm:"size:36;index"`
+	Parent    *Category `gorm:"foreignKey:ParentID"`
 	SectionID string    `gorm:"size:36;index"`
-	Products  []Product `gorm:"many2many:product_categories"`
-	Name      string    `gorm:"size:100"`
-	Slug      string    `gorm:"size:100;uniqueIndex"`
+	Section   Section
+	Products  []Product `gorm:"many2many:product_categories;"`
 	CreatedAt time.Time
 	UpdatedAt time.Time
+	DeletedAt gorm.DeletedAt `gorm:"index"`
 }

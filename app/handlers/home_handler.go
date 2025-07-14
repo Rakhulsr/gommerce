@@ -47,7 +47,7 @@ func (h *HomeHandler) Home(w http.ResponseWriter, r *http.Request) {
 		"current":     1,
 		"totalPages":  1,
 		"featured":    products,
-		"breadcrumbs": breadcrumbs,
+		"Breadcrumbs": breadcrumbs,
 	})
 
 	_ = h.render.HTML(w, http.StatusOK, "home", datas)

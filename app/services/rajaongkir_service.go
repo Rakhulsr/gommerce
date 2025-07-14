@@ -167,7 +167,7 @@ func (s *RajaOngkirService) CalculateCost(origin, destination string, weight int
 		return nil, fmt.Errorf("failed to read cost response body: %w", err)
 	}
 
-	log.Printf("RajaOngkirService: Raw RajaOngkir cost API response - Status: %s, Body: %s", resp.Status, string(body)) // Log respons mentah
+	log.Printf("RajaOngkirService: Raw RajaOngkir cost API response - Status: %s, Body: %s", resp.Status, string(body))
 
 	if resp.StatusCode != http.StatusOK {
 

@@ -12,28 +12,22 @@ type UserForTemplate struct {
 	LastName  string
 	Email     string
 	Role      string
-	// RememberTokenSelector *string
-	// RememberTokenHash     string
-
-	// PasswordResetToken   *string
-	// PasswordResetExpires *time.Time
-
-	// CreatedAt time.Time
-	// UpdatedAt time.Time
-	// DeletedAt gorm.DeletedAt
 }
 
 type BasePageData struct {
-	Title         string
-	IsLoggedIn    bool
-	User          *UserForTemplate
-	UserID        string
-	CartCount     int
-	CSRFToken     string
-	Message       string
-	MessageStatus string
-	Query         url.Values
-	Breadcrumbs   []breadcrumb.Breadcrumb
-	IsAuthPage    bool
-	IsAdminPage   bool
+	Title                   string
+	IsLoggedIn              bool
+	User                    *UserForTemplate
+	UserID                  string
+	CartCount               int
+	CSRFToken               string
+	Message                 string
+	MessageStatus           string
+	Query                   url.Values
+	Breadcrumbs             []breadcrumb.Breadcrumb
+	IsAuthPage              bool
+	IsAdminPage             bool
+	HideAdminWelcomeMessage bool
+	CurrentPath             string
+	IsAdminRoute            bool
 }

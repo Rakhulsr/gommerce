@@ -32,10 +32,11 @@ func NewRouter(db *gorm.DB) *mux.Router {
 	categoryRepo := repositories.NewCategoryRepository(db)
 	cartItemRepo := repositories.NewCartItemRepository(db)
 	cartRepo := repositories.NewCartRepository(db, cartItemRepo)
+	sectionRepo := repositories.NewSectionRepository(db)
 	userRepo := repositories.NewUserRepository(db)
-
 	addressRepo := repositories.NewGormAddressRepository(db)
 
+	cartSvc := services.NewCartService(cartRepo, cartItemRepo, productRepo)
 	shippingSvc := services.NewRajaOngkirService()
 	sessionStore := sessions.NewCookieSessionStore(sessionKeys.AuthKey, sessionKeys.EncKey)
 
@@ -54,9 +55,10 @@ func NewRouter(db *gorm.DB) *mux.Router {
 	homeHandler := handlers.NewHomeHandler(render, categoryRepo, productRepo)
 	cartHandler := handlers.NewCartHandler(productRepo, cartRepo, render, cartItemRepo, shippingSvc)
 	locationAPIHandler := handlers.NewLocationAPIHandler(shippingSvc, render)
-	authHandler := handlers.NewAuthHandler(render, userRepo, cartRepo, sessionStore, mailer)
+	authHandler := handlers.NewAuthHandler(render, userRepo, cartRepo, sessionStore, mailer, validate)
 	addressHandler := handlers.NewAddressHandler(render, addressRepo, userRepo, shippingSvc, validate)
-	adminDashboardHandler := admin.NewAdminDashboardHandler(render)
+
+	adminHandler := admin.NewAdminHandler(render, validate, productRepo, categoryRepo, sectionRepo, userRepo, cartRepo, cartItemRepo, *cartSvc)
 
 	router.PathPrefix("/css/").Handler(http.StripPrefix("/css/", http.FileServer(http.Dir("assets/css"))))
 	router.PathPrefix("/js/").Handler(http.StripPrefix("/js/", http.FileServer(http.Dir("assets/js"))))
@@ -91,6 +93,8 @@ func NewRouter(db *gorm.DB) *mux.Router {
 	authenticated.HandleFunc("/calculate-shipping-cost", locationAPIHandler.CalculateShippingCostAPI).Methods("POST")
 
 	authenticated.HandleFunc("/profile", authHandler.ProfileHandler).Methods("GET")
+	authenticated.HandleFunc("/profile/edit", authHandler.UpdateProfilePost).Methods("PUT", "POST")
+	authenticated.HandleFunc("/profile/edit", authHandler.UpdateProfilePage).Methods("GET")
 	authenticated.HandleFunc("/logout", authHandler.LogoutHandler).Methods("POST")
 
 	authenticated.HandleFunc("/addresses", addressHandler.GetAddressesPage).Methods("GET")
@@ -102,9 +106,31 @@ func NewRouter(db *gorm.DB) *mux.Router {
 	authenticated.HandleFunc("/addresses/set-primary/{id}", addressHandler.SetPrimaryAddressPost).Methods("POST")
 
 	adminRouter := router.PathPrefix("/admin").Subrouter()
-	adminRouter.Use(mux.MiddlewareFunc(middlewares.AuthRequiredMiddleware))
-	adminRouter.Use(mux.MiddlewareFunc(middlewares.AdminAuthMiddleware(userRepo)))
+	adminRouter.Use(middlewares.AuthRequiredMiddleware)
+	adminRouter.Use(middlewares.AdminAuthMiddleware(userRepo))
+	adminRouter.HandleFunc("/dashboard/apply-discount", adminHandler.ApplyGlobalDiscountPost).Methods("POST")
 
-	adminRouter.HandleFunc("/dashboard", adminDashboardHandler.GetDashboard).Methods("GET")
+	adminRouter.HandleFunc("/dashboard", adminHandler.GetDashboard).Methods("GET")
+	adminRouter.HandleFunc("/products", adminHandler.GetProductsPage).Methods("GET")
+	adminRouter.HandleFunc("/products/add", adminHandler.AddProductPage).Methods("GET")
+	adminRouter.HandleFunc("/products/add", adminHandler.AddProductPost).Methods("POST")
+	adminRouter.HandleFunc("/products/edit/{id}", adminHandler.EditProductPage).Methods("GET")
+	adminRouter.HandleFunc("/products/edit/{id}", adminHandler.EditProductPost).Methods("POST", "PUT")
+	adminRouter.HandleFunc("/products/delete/{id}", adminHandler.DeleteProductPost).Methods("POST", "DELETE")
+
+	adminRouter.HandleFunc("/categories", adminHandler.GetCategoriesPage).Methods("GET")
+	adminRouter.HandleFunc("/categories/add", adminHandler.AddCategoryPage).Methods("GET")
+	adminRouter.HandleFunc("/categories/add", adminHandler.AddCategoryPost).Methods("POST")
+	adminRouter.HandleFunc("/categories/edit/{id}", adminHandler.EditCategoryPage).Methods("GET")
+	adminRouter.HandleFunc("/categories/edit/{id}", adminHandler.EditCategoryPost).Methods("POST")
+	adminRouter.HandleFunc("/categories/delete/{id}", adminHandler.DeleteCategoryPost).Methods("POST")
+
+	adminRouter.HandleFunc("/users", adminHandler.GetUsersPage).Methods("GET")
+	adminRouter.HandleFunc("/users/add", adminHandler.AddUserPage).Methods("GET")
+	adminRouter.HandleFunc("/users/add", adminHandler.AddUserPost).Methods("POST")
+	adminRouter.HandleFunc("/users/edit/{id}", adminHandler.EditUserPage).Methods("GET")
+	adminRouter.HandleFunc("/users/edit/{id}", adminHandler.EditUserPost).Methods("POST", "PUT")
+	adminRouter.HandleFunc("/users/delete/{id}", adminHandler.DeleteUserPost).Methods("POST", "DELETE")
+
 	return router
 }

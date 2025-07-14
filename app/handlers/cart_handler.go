@@ -32,31 +32,35 @@ type CartHandler struct {
 	locationSvc  *services.RajaOngkirService
 }
 
-func NewCartHandler(productRepo repositories.ProductRepositoryImpl, cartRepo repositories.CartRepositoryImpl, render *render.Render, cartItemRepo repositories.CartItemRepositoryImpl, locationSvc *services.RajaOngkirService) *CartHandler {
-	return &CartHandler{productRepo, cartRepo, cartItemRepo, render, locationSvc}
+func NewCartHandler(
+	productRepo repositories.ProductRepositoryImpl,
+	cartRepo repositories.CartRepositoryImpl,
+	render *render.Render,
+	cartItemRepo repositories.CartItemRepositoryImpl,
+	locationSvc *services.RajaOngkirService,
+) *CartHandler {
+	return &CartHandler{
+		productRepo:  productRepo,
+		cartRepo:     cartRepo,
+		cartItemRepo: cartItemRepo,
+		render:       render,
+		locationSvc:  locationSvc,
+	}
 }
 
 func (h *CartHandler) GetCart(w http.ResponseWriter, r *http.Request) {
 	cartID, ok := r.Context().Value(helpers.ContextKeyCartID).(string)
 	if !ok || cartID == "" {
-		http.Error(w, "Gagal mengakses cart", http.StatusInternalServerError)
-		log.Printf("GetCart: CartID not found in context.")
+		log.Printf("GetCart: CartID not found in context. Rendering empty cart.")
+		h.renderEmptyCart(w, r, "info", "Keranjang Anda kosong.")
 		return
 	}
 
 	cart, err := h.cartRepo.GetCartWithItems(r.Context(), cartID)
 	if err != nil {
-
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-
-			log.Printf("GetCart: Cart with ID %s not found, potentially invalid ID in session.", cartID)
-
-			// Optional: Clear the invalid cart ID from session if you want
-			// if h.sessionStore != nil {
-			// 	_ = h.sessionStore.SetCartID(w, r, "") // Kosongkan CartID di sesi
-			// }
-
-			http.Redirect(w, r, fmt.Sprintf("/carts?status=info&message=%s", url.QueryEscape("Keranjang Anda kosong atau tidak valid.")), http.StatusSeeOther)
+			log.Printf("GetCart: Cart with ID %s not found, potentially invalid ID in session. Rendering empty cart.", cartID)
+			h.renderEmptyCart(w, r, "info", "Keranjang Anda kosong atau tidak valid.")
 			return
 		}
 		log.Printf("GetCart: Gagal mengambil data cart untuk ID %s: %v", cartID, err)
@@ -64,32 +68,52 @@ func (h *CartHandler) GetCart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if cart == nil || len(cart.CartItems) == 0 {
+		log.Printf("GetCart: Cart %s found but empty. Rendering empty cart.", cartID)
+		h.renderEmptyCart(w, r, "info", "Keranjang Anda kosong.")
+		return
+	}
+
 	totalWeight := 0
 	grandTotal := decimal.NewFromFloat(0)
 
 	for _, cartItem := range cart.CartItems {
+
+		if cartItem.Product.ID == "" {
+			product, err := h.productRepo.GetByID(r.Context(), cartItem.ProductID)
+			if err != nil || product == nil {
+				log.Printf("GetCart: Product %s not found for cart item %s. Skipping item recalculation.", cartItem.ProductID, cartItem.ID)
+				continue
+			}
+			cartItem.Product = *product
+		}
+
+		cartItem.BasePrice = cartItem.Product.Price
+		cartItem.BaseTotal = cartItem.BasePrice.Mul(decimal.NewFromInt(int64(cartItem.Qty)))
+
+		itemDiscountAmount := cartItem.Product.DiscountAmount.Mul(decimal.NewFromInt(int64(cartItem.Qty)))
+
+		cartItem.TaxPercent = calc.GetTaxPercent()
+		cartItem.TaxAmount = calc.CalculateTax(cartItem.BaseTotal.Sub(itemDiscountAmount))
+
+		cartItem.SubTotal = cartItem.BaseTotal.Sub(itemDiscountAmount)
+		cartItem.GrandTotal = cartItem.SubTotal.Add(cartItem.TaxAmount)
+
 		if cartItem.Product.ID != "" {
-			productName := cartItem.Product.Name
 			productWeigth := cartItem.Product.Weight.InexactFloat64()
 			ceilWeight := math.Ceil(productWeigth)
 			itemWeight := cartItem.Qty * int(ceilWeight)
 			totalWeight += itemWeight
 
-			itemTotal := cartItem.GrandTotal
-			grandTotal = grandTotal.Add(itemTotal)
-
-			fmt.Println("product name :", productName)
-
+			grandTotal = grandTotal.Add(cartItem.GrandTotal)
 		}
 	}
 
 	cart.TotalWeight = totalWeight
 	cart.GrandTotal = grandTotal
 
-	fmt.Println("Total Weight:", cart.TotalWeight)
-	breadcrumbs := []breadcrumb.Breadcrumb{
-		{Name: "Home", URL: "/"},
-		{Name: "Keranjang Belanja", URL: "/carts"},
+	if err := h.cartRepo.UpdateCartSummary(r.Context(), cart.ID); err != nil {
+		log.Printf("GetCart: Gagal update ringkasan cart %s setelah recalculate item: %v", cart.ID, err)
 	}
 
 	status := r.URL.Query().Get("status")
@@ -105,30 +129,73 @@ func (h *CartHandler) GetCart(w http.ResponseWriter, r *http.Request) {
 
 	supportedCouriers := []other.Courier{
 		{Code: "jne", Name: "JNE"},
-		// {Code: "pos", Name: "POS Indonesia"},
 		{Code: "tiki", Name: "TIKI"},
 	}
 
-	finalPrice := grandTotal
 	originCity := configs.LoadENV.API_ONGKIR_ORIGIN
 
 	pageSpecificData := map[string]interface{}{
 		"title":                 "Keranjang Belanja",
 		"cart":                  cart,
-		"totalWeight":           totalWeight,
-		"grandTotal":            grandTotal,
-		"breadcrumbs":           breadcrumbs,
+		"totalWeight":           cart.TotalWeight,
+		"grandTotal":            cart.GrandTotal,
+		"Breadcrumbs":           []breadcrumb.Breadcrumb{{Name: "Home", URL: "/"}, {Name: "Keranjang Belanja", URL: "/carts"}},
 		"MessageStatus":         status,
 		"Message":               message,
 		"provinces":             provinces,
 		"couriers":              supportedCouriers,
 		"OriginCityID":          originCity,
-		"finalPrice":            finalPrice,
-		"GrandTotalAmountForJS": grandTotal.IntPart(),
+		"finalPrice":            cart.GrandTotal,
+		"GrandTotalAmountForJS": cart.GrandTotal.IntPart(),
 	}
 
 	datas := helpers.GetBaseData(r, pageSpecificData)
+	_ = h.render.HTML(w, http.StatusOK, "carts", datas)
+}
 
+func (h *CartHandler) renderEmptyCart(w http.ResponseWriter, r *http.Request, status, message string) {
+	emptyCart := &models.Cart{
+		BaseTotalPrice:  decimal.Zero,
+		TaxAmount:       decimal.Zero,
+		TaxPercent:      decimal.Zero,
+		DiscountAmount:  decimal.Zero,
+		DiscountPercent: decimal.Zero,
+		GrandTotal:      decimal.Zero,
+		TotalWeight:     0,
+		CartItems:       []models.CartItem{},
+	}
+
+	provinces, err := h.locationSvc.GetProvincesFromAPI()
+	if err != nil {
+		log.Printf("renderEmptyCart: Gagal mengambil daftar provinsi dari RajaOngkir API: %v", err)
+		status = "error"
+		message = "Gagal memuat daftar provinsi untuk pengiriman. Coba lagi nanti."
+		provinces = []other.Province{}
+	}
+
+	supportedCouriers := []other.Courier{
+		{Code: "jne", Name: "JNE"},
+		{Code: "tiki", Name: "TIKI"},
+	}
+
+	originCity := configs.LoadENV.API_ONGKIR_ORIGIN
+
+	pageSpecificData := map[string]interface{}{
+		"title":                 "Keranjang Belanja",
+		"cart":                  emptyCart,
+		"totalWeight":           emptyCart.TotalWeight,
+		"grandTotal":            emptyCart.GrandTotal,
+		"Breadcrumbs":           []breadcrumb.Breadcrumb{{Name: "Home", URL: "/"}, {Name: "Keranjang Belanja", URL: "/carts"}},
+		"MessageStatus":         status,
+		"Message":               message,
+		"provinces":             provinces,
+		"couriers":              supportedCouriers,
+		"OriginCityID":          originCity,
+		"finalPrice":            emptyCart.GrandTotal,
+		"GrandTotalAmountForJS": emptyCart.GrandTotal.IntPart(),
+	}
+
+	datas := helpers.GetBaseData(r, pageSpecificData)
 	_ = h.render.HTML(w, http.StatusOK, "carts", datas)
 }
 
@@ -160,13 +227,12 @@ func (h *CartHandler) AddItemCart(w http.ResponseWriter, r *http.Request) {
 	}
 
 	product, err := h.productRepo.GetByID(r.Context(), productID)
-	if err != nil {
+	if err != nil || product == nil {
 		log.Printf("AddItemCart: Produk tidak ditemukan: %v", err)
 		redirectBackWithError(w, r, productID, "Produk tidak ditemukan.", "error", h.productRepo)
 		return
 	}
 
-	// Ambil CartID dari context, bukan lagi dari sessions langsung
 	cartID, ok := r.Context().Value(helpers.ContextKeyCartID).(string)
 	if !ok || cartID == "" {
 		log.Printf("AddItemCart: CartID tidak ditemukan di konteks. Ini seharusnya sudah disiapkan oleh middleware.")
@@ -174,7 +240,6 @@ func (h *CartHandler) AddItemCart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Logic untuk mendapatkan atau membuat cart berdasarkan cartID dari sesi (jika belum ada di DB)
 	cart, err := h.cartRepo.GetByID(r.Context(), cartID)
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		log.Printf("AddItemCart: Gagal mengambil cart dengan ID %s: %v", cartID, err)
@@ -183,10 +248,8 @@ func (h *CartHandler) AddItemCart(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if cart == nil || errors.Is(err, gorm.ErrRecordNotFound) {
-		// Ini adalah skenario di mana cartID sudah ada di sesi (dari middleware)
-		// tapi entitas Cart-nya belum ada di database. Buat baru.
 		cart = &models.Cart{
-			ID:              cartID, // Gunakan CartID dari sesi
+			ID:              cartID,
 			BaseTotalPrice:  decimal.Decimal{},
 			TaxAmount:       decimal.Decimal{},
 			TaxPercent:      decimal.Decimal{},
@@ -222,15 +285,26 @@ func (h *CartHandler) AddItemCart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	basePrice := product.Price
+	baseTotal := basePrice.Mul(decimal.NewFromInt(int64(newTotalQtyInCart)))
+
+	productDiscountAmount := product.DiscountAmount.Mul(decimal.NewFromInt(int64(newTotalQtyInCart)))
+
+	taxPercent := calc.GetTaxPercent()
+	taxAmount := calc.CalculateTax(baseTotal.Sub(productDiscountAmount))
+
+	grandTotal := baseTotal.Sub(productDiscountAmount).Add(taxAmount)
+	subTotal := baseTotal.Sub(productDiscountAmount)
+
 	if existingItem != nil {
 		existingItem.Qty = newTotalQtyInCart
-		existingItem.BaseTotal = existingItem.BasePrice.Mul(decimal.NewFromInt(int64(newTotalQtyInCart)))
-		existingItem.TaxPercent = calc.GetTaxPercent()
-		existingItem.TaxAmount = calc.CalculateTax(existingItem.BaseTotal)
-		existingItem.DiscountAmount = calc.CalculateDiscount(existingItem.BaseTotal, product.DiscountPercent)
-		existingItem.DiscountPercent = product.DiscountPercent
-		existingItem.GrandTotal = calc.CalculateGrandTotal(existingItem.BaseTotal, existingItem.TaxAmount, existingItem.DiscountAmount)
-		existingItem.SubTotal = existingItem.GrandTotal
+		existingItem.BasePrice = basePrice
+		existingItem.BaseTotal = baseTotal
+		existingItem.TaxPercent = taxPercent
+		existingItem.TaxAmount = taxAmount
+		existingItem.SubTotal = subTotal
+		existingItem.GrandTotal = grandTotal
+		existingItem.UpdatedAt = time.Now()
 
 		if err := h.cartItemRepo.Update(r.Context(), existingItem); err != nil {
 			log.Printf("AddItemCart: Gagal update item di cart: %v", err)
@@ -238,25 +312,19 @@ func (h *CartHandler) AddItemCart(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else {
-		basePrice := product.Price
-		taxPercent := calc.GetTaxPercent()
-		discountPercent := product.DiscountPercent
-
 		item := &models.CartItem{
-			ID:              uuid.New().String(),
-			CartID:          cartID,
-			ProductID:       productID,
-			Qty:             qty,
-			BasePrice:       basePrice,
-			BaseTotal:       basePrice.Mul(decimal.NewFromInt(int64(qty))),
-			TaxAmount:       calc.CalculateTax(basePrice.Mul(decimal.NewFromInt(int64(qty)))),
-			TaxPercent:      taxPercent,
-			DiscountAmount:  calc.CalculateDiscount(basePrice.Mul(decimal.NewFromInt(int64(qty))), discountPercent),
-			DiscountPercent: discountPercent,
-			GrandTotal:      calc.CalculateGrandTotal(basePrice.Mul(decimal.NewFromInt(int64(qty))), calc.CalculateTax(basePrice.Mul(decimal.NewFromInt(int64(qty)))), calc.CalculateDiscount(basePrice.Mul(decimal.NewFromInt(int64(qty))), discountPercent)),
-			SubTotal:        calc.CalculateGrandTotal(basePrice.Mul(decimal.NewFromInt(int64(qty))), calc.CalculateTax(basePrice.Mul(decimal.NewFromInt(int64(qty)))), calc.CalculateDiscount(basePrice.Mul(decimal.NewFromInt(int64(qty))), discountPercent)),
-			CreatedAt:       time.Now(),
-			UpdatedAt:       time.Now(),
+			ID:         uuid.New().String(),
+			CartID:     cartID,
+			ProductID:  productID,
+			Qty:        newTotalQtyInCart,
+			BasePrice:  basePrice,
+			BaseTotal:  baseTotal,
+			TaxAmount:  taxAmount,
+			TaxPercent: taxPercent,
+			GrandTotal: grandTotal,
+			SubTotal:   subTotal,
+			CreatedAt:  time.Now(),
+			UpdatedAt:  time.Now(),
 		}
 		if err := h.cartItemRepo.Add(r.Context(), item); err != nil {
 			log.Printf("Gagal menambahkan item baru: %v", err)
@@ -301,7 +369,7 @@ func (h *CartHandler) UpdateCartItem(w http.ResponseWriter, r *http.Request) {
 	}
 
 	product, err := h.productRepo.GetByID(r.Context(), productID)
-	if err != nil {
+	if err != nil || product == nil {
 		http.Redirect(w, r, fmt.Sprintf("/carts?status=error&message=%s", url.QueryEscape("Produk terkait tidak ditemukan!")), http.StatusSeeOther)
 		return
 	}
@@ -313,11 +381,15 @@ func (h *CartHandler) UpdateCartItem(w http.ResponseWriter, r *http.Request) {
 	}
 
 	item.Qty = qty
+	item.BasePrice = product.Price
 	item.BaseTotal = item.BasePrice.Mul(decimal.NewFromInt(int64(qty)))
-	item.TaxAmount = calc.CalculateTax(item.BaseTotal)
-	item.DiscountAmount = calc.CalculateDiscount(item.BaseTotal, item.DiscountPercent)
-	item.GrandTotal = calc.CalculateGrandTotal(item.BaseTotal, item.TaxAmount, item.DiscountAmount)
-	item.SubTotal = item.GrandTotal
+
+	productDiscountAmount := product.DiscountAmount.Mul(decimal.NewFromInt(int64(qty)))
+
+	item.TaxAmount = calc.CalculateTax(item.BaseTotal.Sub(productDiscountAmount))
+	item.GrandTotal = item.BaseTotal.Sub(productDiscountAmount).Add(item.TaxAmount)
+	item.SubTotal = item.BaseTotal.Sub(productDiscountAmount)
+	item.UpdatedAt = time.Now()
 
 	if err := h.cartItemRepo.Update(r.Context(), item); err != nil {
 		log.Println("Gagal update item:", err)
@@ -353,17 +425,12 @@ func (h *CartHandler) DeleteCartItem(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *CartHandler) GetCartCount(w http.ResponseWriter, r *http.Request) {
-	// Ambil CartCount dari konteks yang sudah disisipkan oleh CartCountMiddleware.
-	// CartCountKey sekarang ada di package helpers.
 	if cartCountVal := r.Context().Value(helpers.CartCountKey); cartCountVal != nil {
 		if count, ok := cartCountVal.(int); ok {
 			w.Write([]byte(strconv.Itoa(count)))
 			return
 		}
 	}
-
-	// Jika CartCount tidak ditemukan di konteks atau bukan tipe int,
-	// asumsikan 0 item di keranjang. Ini adalah fallback yang aman.
 	w.Write([]byte("0"))
 }
 

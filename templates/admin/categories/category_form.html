@@ -1,0 +1,74 @@
+{{ define "admin/categories/form" }}
+<div class="flex min-h-screen bg-gray-100">
+    {{ template "admin_sidebar" . }}
+
+    <div class="flex-1 px-6 py-8">
+        <h1 class="text-3xl font-bold text-gray-800 mb-6">{{ if .IsEdit }}Edit Kategori{{ else }}Tambah Kategori Baru{{ end }}</h1>
+
+        {{ if .Message }}
+        <div id="flash-message" class="mb-4 p-4 rounded-lg relative flex items-center justify-between shadow-sm
+            {{ if eq .MessageStatus "success" }} bg-green-50 border border-green-300 text-green-800
+            {{ else if eq .MessageStatus "error" }} bg-red-50 border border-red-300 text-red-800
+            {{ else if eq .MessageStatus "warning" }} bg-yellow-50 border border-yellow-300 text-yellow-800
+            {{ else }} bg-blue-50 border border-blue-300 text-blue-800
+            {{ end }}">
+            <span>{{ .Message }}</span>
+            <button type="button" class="ml-4 text-gray-700 hover:text-gray-900 focus:outline-none" onclick="this.parentElement.remove()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        {{ end }}
+
+        <div class="bg-blue-50 rounded-lg shadow-sm p-6">
+            <form action="{{ .FormAction }}" method="POST">
+                {{ if .IsEdit }}
+                    <input type="hidden" name="id" value="{{ .CategoryData.ID }}">
+                {{ end }}
+
+                <div class="mb-4">
+                    <label for="name" class="block text-gray-700 text-sm font-bold mb-2">Nama Kategori:</label>
+                    <input type="text" id="name" name="name" value="{{ .CategoryData.Name }}"
+                           class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline {{ if .Errors.name }}border-red-500{{ end }}"
+                           placeholder="Masukkan nama kategori">
+                    {{ if .Errors.name }}
+                        <p class="text-red-500 text-xs italic">{{ .Errors.name }}</p>
+                    {{ end }}
+                </div>
+
+                {{/* Jika Anda memiliki field ParentID atau SectionID di model Category, tambahkan di sini */}}
+                {{/* Contoh untuk ParentID (dropdown kategori induk) */}}
+                {{/*
+                <div class="mb-4">
+                    <label for="parent_id" class="block text-gray-700 text-sm font-bold mb-2">Kategori Induk (Opsional):</label>
+                    <select id="parent_id" name="parent_id" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline">
+                        <option value="">-- Pilih Kategori Induk --</option>
+                        {{ range .Categories }}
+                            <option value="{{ .ID }}" {{ if eq .ID $.CategoryData.ParentID }}selected{{ end }}>{{ .Name }}</option>
+                        {{ end }}
+                    </select>
+                </div>
+                */}}
+
+                {{/* Contoh untuk SectionID (jika ada model Section) */}}
+                {{/*
+                <div class="mb-4">
+                    <label for="section_id" class="block text-gray-700 text-sm font-bold mb-2">Section (Opsional):</label>
+                    <input type="text" id="section_id" name="section_id" value="{{ .CategoryData.SectionID }}"
+                           class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                           placeholder="Masukkan ID Section">
+                </div>
+                */}}
+
+                <div class="flex items-center justify-between">
+                    <button type="submit" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md shadow-md transition duration-300 ease-in-out">
+                        {{ if .IsEdit }}Perbarui Kategori{{ else }}Tambah Kategori{{ end }}
+                    </button>
+                    <a href="/admin/categories" class="inline-block align-baseline font-bold text-sm text-gray-600 hover:text-gray-800">
+                        Batal
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{{ end }}

@@ -40,7 +40,7 @@ func (m *Mailer) SendHTMLEmail(to, subject, htmlBody string) error {
 	}
 	msg += "\r\n" + htmlBody
 
-	auth := smtp.PlainAuth("", m.config.Username, m.config.Password, m.config.Host)
+	auth := smtp.PlainAuth(m.config.From, m.config.Username, m.config.Password, m.config.Host)
 
 	addr := fmt.Sprintf("%s:%s", m.config.Host, m.config.Port)
 
@@ -52,40 +52,6 @@ func (m *Mailer) SendHTMLEmail(to, subject, htmlBody string) error {
 
 	log.Printf("Email HTML berhasil dikirim ke %s", to)
 	return nil
-}
-
-func BuildResetPasswordEmailBody(resetLink string) string {
-	return fmt.Sprintf(`
-		<html>
-		<head>
-			<style>
-				body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-				.container { max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 5px; }
-				.button { 
-                    display: inline-block; 
-                    padding: 10px 20px; 
-                    margin-top: 20px; 
-                    background-color: #007bff; 
-                    color: #ffffff !important; /* Penting untuk warna teks di link */
-                    text-decoration: none; 
-                    border-radius: 5px; 
-                }
-			</style>
-		</head>
-		<body>
-			<div class="container">
-				<h2>Permintaan Reset Kata Sandi</h2>
-				<p>Kami menerima permintaan untuk mereset kata sandi akun Anda.</p>
-				<p>Untuk mengatur ulang kata sandi Anda, silakan klik tautan di bawah ini:</p>
-				<p><a href="%s" class="button">Reset Kata Sandi Anda</a></p>
-				<p>Tautan ini akan kedaluwarsa dalam 1 jam.</p>
-				<p>Jika Anda tidak meminta reset kata sandi, abaikan email ini.</p>
-				<p>Terima kasih,</p>
-				<p>Tim %s</p>
-			</div>
-		</body>
-		</html>
-	`, resetLink, "Nama Aplikasi Anda")
 }
 
 func BuildOTPEmailBody(otpCode string, expiryMinutes int) string {
