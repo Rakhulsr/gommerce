@@ -2,23 +2,18 @@ package services
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log"
-	"time"
 
 	"github.com/Rakhulsr/go-ecommerce/app/models"
 	"github.com/Rakhulsr/go-ecommerce/app/repositories"
 	"github.com/Rakhulsr/go-ecommerce/app/utils/calc"
-	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 )
 
-var (
-	ErrProductNotFound  = errors.New("product not found")
-	ErrCartNotFound     = errors.New("cart not found")
-	ErrCartItemNotFound = errors.New("cart item not found")
+const (
+	DefaultTaxPercent = 12.00
 )
 
 type CartService struct {
@@ -28,7 +23,12 @@ type CartService struct {
 	db           *gorm.DB
 }
 
-func NewCartService(cartRepo repositories.CartRepositoryImpl, cartItemRepo repositories.CartItemRepositoryImpl, productRepo repositories.ProductRepositoryImpl, db *gorm.DB) *CartService {
+func NewCartService(
+	cartRepo repositories.CartRepositoryImpl,
+	cartItemRepo repositories.CartItemRepositoryImpl,
+	productRepo repositories.ProductRepositoryImpl,
+	db *gorm.DB,
+) *CartService {
 	return &CartService{
 		cartRepo:     cartRepo,
 		cartItemRepo: cartItemRepo,
@@ -52,228 +52,313 @@ func (s *CartService) GetUserCart(ctx context.Context, userID string) (*models.C
 		return nil, fmt.Errorf("gagal mendapatkan detailed user cart: %w", err)
 	}
 	if detailedCart == nil {
-		return nil, nil
+
+		return &models.Cart{
+			ID:             cart.ID,
+			UserID:         userID,
+			BaseTotalPrice: decimal.Zero,
+			TaxAmount:      decimal.Zero,
+			TaxPercent:     calc.GetTaxPercent(),
+			DiscountAmount: decimal.Zero,
+			GrandTotal:     decimal.Zero,
+			TotalWeight:    decimal.Zero,
+			ShippingCost:   decimal.Zero,
+			TotalItems:     0,
+			CartItems:      []models.CartItem{},
+		}, nil
 	}
 
 	if err := s.cartRepo.UpdateCartSummary(ctx, detailedCart.ID); err != nil {
 		log.Printf("GetUserCart: Gagal update summary cart %s: %v", detailedCart.ID, err)
 	}
 
-	return detailedCart, nil
+	finalCart, err := s.cartRepo.GetCartWithItems(ctx, detailedCart.ID)
+	if err != nil {
+		log.Printf("GetUserCart: Gagal memuat ulang cart setelah update summary %s: %v", detailedCart.ID, err)
+		return detailedCart, nil
+	}
+
+	return finalCart, nil
 }
 
 func (s *CartService) AddItemToCart(ctx context.Context, cartID, userID, productID string, qty int) error {
-	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		product, err := s.productRepo.GetByID(ctx, productID)
-		if err != nil || product == nil {
-			return ErrProductNotFound
-		}
+	product, err := s.productRepo.GetByID(ctx, productID)
+	if err != nil || product == nil {
+		return fmt.Errorf("product not found or error getting product: %w", err)
+	}
 
-		if product.Stock < qty {
-			return ErrInsufficientStock
-		}
+	if product.Stock < qty {
+		return fmt.Errorf("not enough stock for product '%s'. Available: %d, Requested: %d", product.Name, product.Stock, qty)
+	}
 
-		cart, err := s.cartRepo.GetOrCreateCartByUserID(ctx, cartID, userID)
+	cart, err := s.cartRepo.GetCartByUserID(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("failed to get user cart: %w", err)
+	}
+
+	if cart == nil {
+
+		cart = &models.Cart{
+			UserID: userID,
+
+			BaseTotalPrice: decimal.Zero,
+			TaxAmount:      decimal.Zero,
+			TaxPercent:     calc.GetTaxPercent(),
+			DiscountAmount: decimal.Zero,
+			GrandTotal:     decimal.Zero,
+			TotalWeight:    decimal.Zero,
+			ShippingCost:   decimal.Zero,
+			TotalItems:     0,
+		}
+		cart, err = s.cartRepo.AddCart(ctx, cart)
 		if err != nil {
-			return fmt.Errorf("gagal mendapatkan atau membuat keranjang: %w", err)
+			return fmt.Errorf("failed to create new cart: %w", err)
+		}
+	}
+
+	finalPriceUnit := product.Price
+	discountAmountPerUnit := decimal.Zero
+	if product.DiscountPercent.GreaterThan(decimal.Zero) {
+		discountAmountPerUnit = product.Price.Mul(product.DiscountPercent.Div(decimal.NewFromInt(100)))
+		finalPriceUnit = product.Price.Sub(discountAmountPerUnit)
+	} else if product.DiscountAmount.GreaterThan(decimal.Zero) {
+		discountAmountPerUnit = product.DiscountAmount
+		finalPriceUnit = product.Price.Sub(discountAmountPerUnit)
+	}
+
+	if finalPriceUnit.LessThan(decimal.Zero) {
+		finalPriceUnit = decimal.Zero
+	}
+
+	cartItem, err := s.cartItemRepo.GetByCartIDAndProductID(ctx, cart.ID, productID)
+	if err != nil {
+		return fmt.Errorf("failed to get cart item: %w", err)
+	}
+
+	if cartItem == nil {
+
+		cartItem = &models.CartItem{
+			CartID:          cart.ID,
+			ProductID:       productID,
+			Qty:             qty,
+			Price:           product.Price,
+			DiscountPercent: product.DiscountPercent,
+			DiscountAmount:  discountAmountPerUnit,
+			FinalPriceUnit:  finalPriceUnit,
+			Subtotal:        finalPriceUnit.Mul(decimal.NewFromInt(int64(qty))),
 		}
 
-		cartItem, err := s.cartItemRepo.GetCartAndProduct(ctx, cart.ID, productID)
-		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-			return fmt.Errorf("gagal memeriksa item keranjang: %w", err)
+		if err := s.cartItemRepo.Add(ctx, cartItem); err != nil {
+			return fmt.Errorf("failed to create cart item: %w", err)
 		}
+	} else {
 
-		if cartItem != nil {
-
-			newQty := cartItem.Qty + qty
-			if product.Stock < newQty {
-				return ErrInsufficientStock
-			}
-			cartItem.Qty = newQty
-
-			cartItem.BasePrice = product.Price
-			cartItem.TotalPrice = product.Price.Mul(decimal.NewFromInt(int64(newQty)))
-			cartItem.BaseTotal = cartItem.BasePrice.Mul(decimal.NewFromInt(int64(newQty)))
-			cartItem.TaxPercent = calc.GetTaxPercent()
-			cartItem.TaxAmount = calc.CalculateTax(cartItem.BaseTotal.Sub(product.DiscountAmount.Mul(decimal.NewFromInt(int64(newQty)))))
-			cartItem.SubTotal = cartItem.BaseTotal.Sub(product.DiscountAmount.Mul(decimal.NewFromInt(int64(newQty))))
-			cartItem.GrandTotal = cartItem.SubTotal.Add(cartItem.TaxAmount)
-			cartItem.UpdatedAt = time.Now()
-
-			if err := s.cartItemRepo.Update(ctx, cartItem); err != nil {
-				return err
-			}
-		} else {
-
-			newCartItem := &models.CartItem{
-				ID:         uuid.New().String(),
-				CartID:     cart.ID,
-				ProductID:  product.ID,
-				Qty:        qty,
-				BasePrice:  product.Price,
-				BaseTotal:  product.Price.Mul(decimal.NewFromInt(int64(qty))),
-				TaxPercent: calc.GetTaxPercent(),
-				TaxAmount:  calc.CalculateTax(product.Price.Mul(decimal.NewFromInt(int64(qty))).Sub(product.DiscountAmount.Mul(decimal.NewFromInt(int64(qty))))),
-				SubTotal:   product.Price.Mul(decimal.NewFromInt(int64(qty))).Sub(product.DiscountAmount.Mul(decimal.NewFromInt(int64(qty)))),
-				GrandTotal: product.Price.Mul(decimal.NewFromInt(int64(qty))).Sub(product.DiscountAmount.Mul(decimal.NewFromInt(int64(qty)))).Add(calc.CalculateTax(product.Price.Mul(decimal.NewFromInt(int64(qty))).Sub(product.DiscountAmount.Mul(decimal.NewFromInt(int64(qty)))))),
-				CreatedAt:  time.Now(),
-				UpdatedAt:  time.Now(),
-			}
-			if err := s.cartItemRepo.Add(ctx, newCartItem); err != nil {
-				return err
-			}
+		newQty := cartItem.Qty + qty
+		if product.Stock < newQty {
+			return fmt.Errorf("not enough stock to add more for product '%s'. Max allowed: %d", product.Name, product.Stock)
 		}
-
-		if err := s.cartRepo.UpdateCartSummary(ctx, cart.ID); err != nil {
-			log.Printf("AddItemToCart: Gagal update ringkasan cart %s: %v", cart.ID, err)
-			return fmt.Errorf("gagal memperbarui ringkasan keranjang: %w", err)
+		cartItem.Qty = newQty
+		cartItem.Price = product.Price
+		cartItem.DiscountPercent = product.DiscountPercent
+		cartItem.DiscountAmount = discountAmountPerUnit
+		cartItem.FinalPriceUnit = finalPriceUnit
+		cartItem.Subtotal = finalPriceUnit.Mul(decimal.NewFromInt(int64(newQty)))
+		if err := s.cartItemRepo.Update(ctx, cartItem); err != nil {
+			return fmt.Errorf("failed to update cart item: %w", err)
 		}
+	}
 
-		return nil
-	})
+	updatedCartWithItems, err := s.cartRepo.GetCartWithItems(ctx, cart.ID)
+	if err != nil {
+		log.Printf("AddItemToCart: Gagal memuat ulang cart setelah menambah/memperbarui item: %v", err)
+
+	} else {
+		cart = updatedCartWithItems
+	}
+
+	s.CalculateCartTotals(cart)
+
+	if err := s.cartRepo.UpdateCart(ctx, cart); err != nil {
+		log.Printf("AddItemToCart: Gagal memperbarui total keranjang setelah menambah item: %v", err)
+		return fmt.Errorf("failed to update cart totals after adding item: %w", err)
+	}
+
+	return nil
 }
 
 func (s *CartService) UpdateCartItemQty(ctx context.Context, userID, productID string, newQty int) (*models.Cart, error) {
-	var updatedCartResult *models.Cart
-	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		cart, err := s.cartRepo.GetOrCreateCartByUserID(ctx, "", userID)
-		if err != nil {
-			return fmt.Errorf("failed to get cart: %w", err)
-		}
-		if cart == nil {
-			return ErrCartNotFound
-		}
+	cart, err := s.cartRepo.GetCartByUserID(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user cart: %w", err)
+	}
+	if cart == nil {
+		return nil, fmt.Errorf("cart not found for user: %s", userID)
+	}
 
-		if newQty <= 0 {
+	product, err := s.productRepo.GetByID(ctx, productID)
+	if err != nil || product == nil {
+		return nil, fmt.Errorf("product not found or error getting product: %w", err)
+	}
 
-			removedCart, removeErr := s.RemoveItemFromCart(ctx, userID, productID)
-			if removeErr != nil {
-				return removeErr
-			}
-			updatedCartResult = removedCart
-			return nil
-		}
+	cartItem, err := s.cartItemRepo.GetByCartIDAndProductID(ctx, cart.ID, productID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get cart item: %w", err)
+	}
+	if cartItem == nil {
+		return nil, fmt.Errorf("cart item not found in cart %s for product %s", cart.ID, productID)
+	}
 
-		item, err := s.cartItemRepo.GetCartAndProduct(ctx, cart.ID, productID)
-		if err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return ErrCartItemNotFound
-			}
-			return fmt.Errorf("failed to get cart item: %w", err)
-		}
-		if item == nil {
-			return ErrCartItemNotFound
-		}
+	if newQty <= 0 {
 
-		product, err := s.productRepo.GetByID(ctx, productID)
-		if err != nil || product == nil {
-			return ErrProductNotFound
+		if err := s.cartItemRepo.Delete(ctx, cartItem.ID); err != nil {
+			return nil, fmt.Errorf("failed to delete cart item: %w", err)
 		}
-
+	} else {
 		if product.Stock < newQty {
-			return fmt.Errorf("not enough stock for product %s (available: %d)", product.Name, product.Stock)
+			return nil, fmt.Errorf("not enough stock for product '%s'. Available: %d, Requested: %d", product.Name, product.Stock, newQty)
 		}
 
-		item.Qty = newQty
-		item.BasePrice = product.Price
-		item.TotalPrice = product.Price.Mul(decimal.NewFromInt(int64(newQty)))
-		item.BaseTotal = item.BasePrice.Mul(decimal.NewFromInt(int64(newQty)))
-		item.TaxPercent = calc.GetTaxPercent()
-		item.TaxAmount = calc.CalculateTax(item.BaseTotal.Sub(product.DiscountAmount.Mul(decimal.NewFromInt(int64(newQty)))))
-		item.SubTotal = item.BaseTotal.Sub(product.DiscountAmount.Mul(decimal.NewFromInt(int64(newQty))))
-		item.GrandTotal = item.SubTotal.Add(item.TaxAmount)
-		item.UpdatedAt = time.Now()
-
-		if err := s.cartItemRepo.Update(ctx, item); err != nil {
-			return fmt.Errorf("failed to update cart item quantity: %w", err)
+		finalPriceUnit := product.Price
+		discountAmountPerUnit := decimal.Zero
+		if product.DiscountPercent.GreaterThan(decimal.Zero) {
+			discountAmountPerUnit = product.Price.Mul(product.DiscountPercent.Div(decimal.NewFromInt(100)))
+			finalPriceUnit = product.Price.Sub(discountAmountPerUnit)
+		} else if product.DiscountAmount.GreaterThan(decimal.Zero) {
+			discountAmountPerUnit = product.DiscountAmount
+			finalPriceUnit = product.Price.Sub(discountAmountPerUnit)
+		}
+		if finalPriceUnit.LessThan(decimal.Zero) {
+			finalPriceUnit = decimal.Zero
 		}
 
-		if err := s.cartRepo.UpdateCartSummary(ctx, cart.ID); err != nil {
-			log.Printf("UpdateCartItemQty: Gagal update ringkasan cart %s: %v", cart.ID, err)
-			return fmt.Errorf("failed to update cart summary: %w", err)
+		cartItem.Qty = newQty
+		cartItem.Price = product.Price
+		cartItem.DiscountPercent = product.DiscountPercent
+		cartItem.DiscountAmount = discountAmountPerUnit
+		cartItem.FinalPriceUnit = finalPriceUnit
+		cartItem.Subtotal = finalPriceUnit.Mul(decimal.NewFromInt(int64(newQty)))
+		if err := s.cartItemRepo.Update(ctx, cartItem); err != nil {
+			return nil, fmt.Errorf("failed to update cart item: %w", err)
 		}
+	}
 
-		updatedCart, err := s.cartRepo.GetCartWithItems(ctx, cart.ID)
-		if err != nil {
-			log.Printf("UpdateCartItemQty: Gagal mengambil cart yang diperbarui: %v", err)
-			return fmt.Errorf("failed to retrieve updated cart: %w", err)
-		}
-		updatedCartResult = updatedCart
-		return nil
-	})
+	s.CalculateCartTotals(cart)
+	if err := s.cartRepo.UpdateCart(ctx, cart); err != nil {
+		log.Printf("UpdateCartItemQty: Gagal memperbarui total keranjang setelah mengubah item: %v", err)
+		return nil, fmt.Errorf("failed to update cart totals: %w", err)
+	}
 
-	return updatedCartResult, err
+	updatedCart, err := s.cartRepo.GetByUserIDWithItems(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get updated cart with items: %w", err)
+	}
+	s.CalculateCartTotals(updatedCart)
+
+	return updatedCart, nil
 }
 
 func (s *CartService) RemoveItemFromCart(ctx context.Context, userID, productID string) (*models.Cart, error) {
-	var updatedCartResult *models.Cart
-	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		cart, err := s.cartRepo.GetOrCreateCartByUserID(ctx, "", userID)
-		if err != nil {
-			return fmt.Errorf("failed to get cart: %w", err)
-		}
-		if cart == nil {
-			return ErrCartNotFound
-		}
+	cart, err := s.cartRepo.GetCartByUserID(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user cart: %w", err)
+	}
+	if cart == nil {
+		return nil, nil
+	}
 
-		cartItem, err := s.cartItemRepo.GetCartAndProduct(ctx, cart.ID, productID)
-		if err != nil || cartItem == nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return ErrCartItemNotFound
-			}
-			return fmt.Errorf("failed to get cart item: %w", err)
-		}
+	cartItem, err := s.cartItemRepo.GetByCartIDAndProductID(ctx, cart.ID, productID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get cart item: %w", err)
+	}
+	if cartItem == nil {
+		return nil, nil
+	}
 
-		err = s.cartItemRepo.Delete(ctx, cart.ID, productID)
-		if err != nil {
-			return fmt.Errorf("failed to remove item from cart: %w", err)
-		}
+	if err := s.cartItemRepo.Delete(ctx, cartItem.ID); err != nil {
+		return nil, fmt.Errorf("failed to delete cart item: %w", err)
+	}
 
-		if err := s.cartRepo.UpdateCartSummary(ctx, cart.ID); err != nil {
-			log.Printf("RemoveItemFromCart: Gagal update ringkasan cart %s: %v", cart.ID, err)
+	s.CalculateCartTotals(cart)
+	if err := s.cartRepo.UpdateCart(ctx, cart); err != nil {
+		log.Printf("RemoveItemFromCart: Gagal memperbarui total keranjang setelah menghapus item: %v", err)
+		return nil, fmt.Errorf("failed to update cart totals after removing item: %w", err)
+	}
 
-		}
+	updatedCart, err := s.cartRepo.GetByUserIDWithItems(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get updated cart with items: %w", err)
+	}
+	s.CalculateCartTotals(updatedCart)
 
-		updatedCart, err := s.cartRepo.GetCartWithItems(ctx, cart.ID)
-		if err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				updatedCartResult = nil
-				return nil
-			}
-			log.Printf("RemoveItemFromCart: Gagal mengambil cart yang diperbarui setelah penghapusan: %v", err)
-			return fmt.Errorf("failed to retrieve updated cart after removal: %w", err)
-		}
-
-		if updatedCart == nil || updatedCart.TotalItems == 0 {
-			log.Printf("RemoveItemFromCart: Cart %s kosong, menghapus cart.", cart.ID)
-			if err := s.cartRepo.DeleteCart(ctx, tx, cart.ID); err != nil {
-				log.Printf("RemoveItemFromCart: Gagal menghapus cart kosong %s: %v", cart.ID, err)
-				return fmt.Errorf("failed to delete empty cart: %w", err)
-			}
-			updatedCartResult = nil
-			return nil
-		}
-
-		updatedCartResult = updatedCart
-		return nil
-	})
-
-	return updatedCartResult, err
+	return updatedCart, nil
 }
 
-func (s *CartService) ClearCart(ctx context.Context, cartID string) error {
-	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		cart, err := s.cartRepo.GetCartWithItems(ctx, cartID)
-		if err != nil || cart == nil {
-			return ErrCartNotFound
+func (s *CartService) CalculateCartTotals(cart *models.Cart) {
+	if cart == nil {
+		return
+	}
+
+	baseTotalPrice := decimal.Zero
+	totalWeight := decimal.Zero
+	totalItems := 0
+	totalDiscountAmount := decimal.Zero
+
+	if len(cart.CartItems) == 0 {
+		ctx := context.Background()
+		items, err := s.cartItemRepo.GetByCartID(ctx, cart.ID)
+		if err != nil {
+			log.Printf("CalculateCartTotals: Gagal memuat item keranjang untuk kalkulasi: %v", err)
+
+		} else {
+			cart.CartItems = items
+		}
+	}
+
+	for i := range cart.CartItems {
+		item := &cart.CartItems[i]
+
+		product, err := s.productRepo.GetByID(context.Background(), item.ProductID)
+		if err != nil || product == nil {
+			log.Printf("CalculateCartTotals: Produk ID %s tidak ditemukan atau error saat memuat, tidak dapat menghitung item ini.", item.ProductID)
+			continue
 		}
 
-		if err := s.cartItemRepo.ClearCartItems(ctx, tx, cartID); err != nil {
-			return err
+		item.Price = product.Price
+		item.DiscountPercent = product.DiscountPercent
+		item.DiscountAmount = product.DiscountAmount
+
+		finalPriceUnit := item.Price
+		if item.DiscountPercent.GreaterThan(decimal.Zero) {
+
+			item.DiscountAmount = item.Price.Mul(item.DiscountPercent.Div(decimal.NewFromInt(100)))
+			finalPriceUnit = item.Price.Sub(item.DiscountAmount)
+		} else if item.DiscountAmount.GreaterThan(decimal.Zero) {
+
+			finalPriceUnit = item.Price.Sub(item.DiscountAmount)
 		}
 
-		cart.CalculateTotals()
-		err = s.cartRepo.UpdateCart(ctx, cart)
-		return err
-	})
+		if finalPriceUnit.LessThan(decimal.Zero) {
+			finalPriceUnit = decimal.Zero
+		}
+		item.FinalPriceUnit = finalPriceUnit
+
+		item.Subtotal = finalPriceUnit.Mul(decimal.NewFromInt(int64(item.Qty)))
+
+		baseTotalPrice = baseTotalPrice.Add(item.Subtotal)
+		totalWeight = totalWeight.Add(product.Weight.Mul(decimal.NewFromInt(int64(item.Qty))))
+		totalItems += item.Qty
+		totalDiscountAmount = totalDiscountAmount.Add(item.DiscountAmount.Mul(decimal.NewFromInt(int64(item.Qty))))
+	}
+
+	cart.BaseTotalPrice = baseTotalPrice
+	cart.DiscountAmount = totalDiscountAmount
+	cart.TotalWeight = totalWeight
+	cart.TotalItems = totalItems
+
+	taxPercent := decimal.NewFromFloat(DefaultTaxPercent)
+	cart.TaxPercent = taxPercent
+	cart.TaxAmount = baseTotalPrice.Mul(taxPercent.Div(decimal.NewFromInt(100)))
+
+	cart.GrandTotal = baseTotalPrice.Add(cart.TaxAmount)
+
 }

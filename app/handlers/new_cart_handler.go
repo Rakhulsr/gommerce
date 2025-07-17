@@ -1,7 +1,10 @@
 package handlers
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
@@ -13,10 +16,17 @@ import (
 	"github.com/Rakhulsr/go-ecommerce/app/repositories"
 	"github.com/Rakhulsr/go-ecommerce/app/services"
 	"github.com/Rakhulsr/go-ecommerce/app/utils/breadcrumb"
+	"github.com/Rakhulsr/go-ecommerce/app/utils/calc"
 	"github.com/shopspring/decimal"
 	"github.com/unrolled/render"
 )
 
+type CalculateShippingCostRequest struct {
+	Origin      int    `json:"origin"`
+	Destination int    `json:"destination"`
+	Weight      int    `json:"weight"`
+	Courier     string `json:"courier"`
+}
 type KomerceCartHandler struct {
 	productRepo        repositories.ProductRepositoryImpl
 	cartRepo           repositories.CartRepositoryImpl
@@ -26,6 +36,7 @@ type KomerceCartHandler struct {
 	userRepo           repositories.UserRepositoryImpl
 	addressRepo        repositories.AddressRepository
 	cartSvc            *services.CartService
+	merchantOriginID   int
 }
 
 func NewKomerceCartHandler(
@@ -37,6 +48,7 @@ func NewKomerceCartHandler(
 	userRepo repositories.UserRepositoryImpl,
 	addressRepo repositories.AddressRepository,
 	cartSvc *services.CartService,
+	merchantOriginID int,
 ) *KomerceCartHandler {
 	return &KomerceCartHandler{
 		productRepo:        productRepo,
@@ -47,6 +59,7 @@ func NewKomerceCartHandler(
 		userRepo:           userRepo,
 		addressRepo:        addressRepo,
 		cartSvc:            cartSvc,
+		merchantOriginID:   merchantOriginID,
 	}
 }
 
@@ -87,22 +100,30 @@ func (h *KomerceCartHandler) GetCart(w http.ResponseWriter, r *http.Request) {
 
 	supportedCouriers := []other.Courier{
 		{Code: "jne", Name: "JNE"},
-		{Code: "tiki", Name: "TIKI"},
 		{Code: "pos", Name: "POS"},
+		{Code: "jnt", Name: "J&T Express"},
 	}
 
-	originLocationID := "25986"
+	originLocationIDStr := strconv.Itoa(h.merchantOriginID)
+	if h.merchantOriginID == 0 {
+		log.Println("KomerceCartHandler.GetCart: Merchant Origin ID is 0, using default Depok (25986). Check .env config.")
+		originLocationIDStr = "25986"
+	}
 
 	pageSpecificData := map[string]interface{}{
 		"title":                 "Keranjang Belanja",
 		"cart":                  cart,
 		"totalWeight":           cart.TotalWeight,
+		"baseTotalPrice":        cart.BaseTotalPrice,
+		"totalDiscountAmount":   cart.DiscountAmount,
+		"taxAmount":             cart.TaxAmount,
+		"taxPercent":            cart.TaxPercent,
 		"grandTotal":            cart.GrandTotal,
 		"Breadcrumbs":           []breadcrumb.Breadcrumb{{Name: "Home", URL: "/"}, {Name: "Carts", URL: "/carts"}},
 		"MessageStatus":         status,
 		"Message":               message,
 		"couriers":              supportedCouriers,
-		"OriginLocationID":      originLocationID,
+		"OriginLocationID":      originLocationIDStr,
 		"finalPrice":            cart.GrandTotal,
 		"GrandTotalAmountForJS": cart.GrandTotal.InexactFloat64(),
 		"Addresses":             userAddresses,
@@ -117,11 +138,12 @@ func (h *KomerceCartHandler) renderEmptyCart(w http.ResponseWriter, r *http.Requ
 	emptyCart := &models.Cart{
 		BaseTotalPrice:  decimal.Zero,
 		TaxAmount:       decimal.Zero,
-		TaxPercent:      decimal.Zero,
+		TaxPercent:      calc.GetTaxPercent(),
 		DiscountAmount:  decimal.Zero,
 		DiscountPercent: decimal.Zero,
 		GrandTotal:      decimal.Zero,
-		TotalWeight:     0,
+		TotalWeight:     decimal.Zero,
+		ShippingCost:    decimal.Zero,
 		TotalItems:      0,
 		CartItems:       []models.CartItem{},
 	}
@@ -143,20 +165,31 @@ func (h *KomerceCartHandler) renderEmptyCart(w http.ResponseWriter, r *http.Requ
 		{Code: "jne", Name: "JNE"},
 		{Code: "tiki", Name: "TIKI"},
 		{Code: "pos", Name: "POS"},
+		{Code: "jnt", Name: "J&T Express"},
+		{Code: "sicepat", Name: "SiCepat"},
+		{Code: "anteraja", Name: "AnterAja"},
 	}
 
-	originLocationID := "25986"
+	originLocationIDStr := strconv.Itoa(h.merchantOriginID)
+	if h.merchantOriginID == 0 {
+		log.Println("KomerceCartHandler.renderEmptyCart: Merchant Origin ID is 0, using default Depok (25986). Check .env config.")
+		originLocationIDStr = "25986"
+	}
 
 	pageSpecificData := map[string]interface{}{
 		"title":                 "Keranjang Belanja",
 		"cart":                  emptyCart,
 		"totalWeight":           emptyCart.TotalWeight,
+		"baseTotalPrice":        emptyCart.BaseTotalPrice,
+		"totalDiscountAmount":   emptyCart.DiscountAmount,
+		"taxAmount":             emptyCart.TaxAmount,
+		"taxPercent":            emptyCart.TaxPercent,
 		"grandTotal":            emptyCart.GrandTotal,
 		"Breadcrumbs":           []breadcrumb.Breadcrumb{{Name: "Home", URL: "/"}, {Name: "Keranjang Belanja", URL: "/carts"}},
 		"MessageStatus":         status,
 		"Message":               message,
 		"couriers":              supportedCouriers,
-		"OriginLocationID":      originLocationID,
+		"OriginLocationID":      originLocationIDStr,
 		"finalPrice":            emptyCart.GrandTotal,
 		"GrandTotalAmountForJS": emptyCart.GrandTotal.InexactFloat64(),
 		"Addresses":             userAddresses,
@@ -230,7 +263,7 @@ func (h *KomerceCartHandler) UpdateCartItem(w http.ResponseWriter, r *http.Reque
 	qtyStr := r.FormValue("qty")
 
 	qty, err := strconv.Atoi(qtyStr)
-	if err != nil || qty <= 0 {
+	if err != nil {
 		http.Redirect(w, r, fmt.Sprintf("/carts?status=error&message=%s", url.QueryEscape("Kuantitas tidak valid!")), http.StatusSeeOther)
 		return
 	}
@@ -284,11 +317,106 @@ func (h *KomerceCartHandler) DeleteCartItem(w http.ResponseWriter, r *http.Reque
 	http.Redirect(w, r, fmt.Sprintf("/carts?status=success&message=%s", url.QueryEscape("Item keranjang berhasil dihapus!")), http.StatusSeeOther)
 }
 
-func (h *KomerceCartHandler) GetCartCount(w http.ResponseWriter, r *http.Request) {
+func (h *KomerceCartHandler) CalculateShippingCost(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	userID, ok := ctx.Value(helpers.ContextKeyUserID).(string)
+	if !ok || userID == "" {
+		log.Println("CalculateShippingCost: UserID not found in context.")
+		h.render.JSON(w, http.StatusUnauthorized, map[string]interface{}{
+			"success": false,
+			"message": "Unauthorized",
+		})
+		return
+	}
 
+	bodyBytes, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		log.Printf("CalculateShippingCost: Gagal membaca raw request body: %v", err)
+		h.render.JSON(w, http.StatusBadRequest, map[string]interface{}{
+			"success": false,
+			"message": "Failed to read request body.",
+		})
+		return
+	}
+	r.Body.Close()
+	r.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
+
+	log.Printf("CalculateShippingCost: Raw Request Body: %s", string(bodyBytes))
+
+	var reqBody CalculateShippingCostRequest
+	err = json.NewDecoder(r.Body).Decode(&reqBody)
+	if err != nil {
+		log.Printf("CalculateShippingCost: Gagal decode request body JSON: %v", err)
+		h.render.JSON(w, http.StatusBadRequest, map[string]interface{}{
+			"success": false,
+			"message": "Invalid request body format.",
+		})
+		return
+	}
+
+	log.Printf("CalculateShippingCost: Decoded Origin: %d", reqBody.Origin)
+	log.Printf("CalculateShippingCost: Decoded Destination: %d", reqBody.Destination)
+	log.Printf("CalculateShippingCost: Decoded Weight: %d", reqBody.Weight)
+	log.Printf("CalculateShippingCost: Decoded Courier: %s", reqBody.Courier)
+
+	originID := h.merchantOriginID
+	destinationID := reqBody.Destination
+	weight := reqBody.Weight
+	courier := reqBody.Courier
+
+	if originID == 0 {
+		log.Println("CalculateShippingCost: Merchant Origin ID is not configured (0).")
+		h.render.JSON(w, http.StatusInternalServerError, map[string]interface{}{
+			"success": false,
+			"message": "Merchant origin ID not configured.",
+		})
+		return
+	}
+
+	if destinationID == 0 {
+		log.Println("CalculateShippingCost: Destination ID is missing or invalid (0).")
+		h.render.JSON(w, http.StatusBadRequest, map[string]interface{}{
+			"success": false,
+			"message": "Destination ID is required and must be a valid number.",
+		})
+		return
+	}
+	if weight <= 0 {
+		log.Println("CalculateShippingCost: Weight is missing or invalid (<= 0).")
+		h.render.JSON(w, http.StatusBadRequest, map[string]interface{}{
+			"success": false,
+			"message": "Weight must be greater than 0.",
+		})
+		return
+	}
+	if courier == "" {
+		log.Println("CalculateShippingCost: Courier is empty.")
+		h.render.JSON(w, http.StatusBadRequest, map[string]interface{}{
+			"success": false,
+			"message": "Courier is required.",
+		})
+		return
+	}
+
+	shippingCosts, err := h.komerceLocationSvc.CalculateCost(ctx, originID, destinationID, weight, courier)
+	if err != nil {
+		log.Printf("CalculateShippingCost: Gagal menghitung biaya pengiriman melalui service Komerce: %v", err)
+		h.render.JSON(w, http.StatusInternalServerError, map[string]interface{}{
+			"success": false,
+			"message": fmt.Sprintf("Gagal menghitung biaya pengiriman: %v", err),
+		})
+		return
+	}
+
+	h.render.JSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"data":    shippingCosts,
+	})
+}
+
+func (h *KomerceCartHandler) GetCartCount(w http.ResponseWriter, r *http.Request) {
 	userID, userOk := r.Context().Value(helpers.ContextKeyUserID).(string)
 	if !userOk || userID == "" {
-
 		w.Write([]byte("0"))
 		return
 	}

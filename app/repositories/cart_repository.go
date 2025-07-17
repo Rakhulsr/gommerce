@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Rakhulsr/go-ecommerce/app/models"
+	"github.com/Rakhulsr/go-ecommerce/app/utils/calc"
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
@@ -25,6 +26,7 @@ type CartRepositoryImpl interface {
 	CreateCartForUser(ctx context.Context, userID string) (*models.Cart, error)
 	GetAllCarts(ctx context.Context) ([]models.Cart, error)
 	AddCart(ctx context.Context, cart *models.Cart) (*models.Cart, error)
+	GetByUserIDWithItems(ctx context.Context, userID string) (*models.Cart, error)
 }
 
 type cartRepository struct {
@@ -88,7 +90,7 @@ func (r *cartRepository) UpdateCartSummary(ctx context.Context, cartID string) e
 		return nil
 	}
 
-	cart.CalculateTotals()
+	cart.CalculateTotals(calc.GetTaxPercent())
 
 	err = r.UpdateCart(ctx, cart)
 	if err != nil {
@@ -190,7 +192,7 @@ func (r *cartRepository) GetOrCreateCartByUserID(ctx context.Context, cartID, us
 			DiscountAmount:  decimal.Zero,
 			DiscountPercent: decimal.Zero,
 			GrandTotal:      decimal.Zero,
-			TotalWeight:     0,
+			TotalWeight:     decimal.Zero,
 			TotalItems:      0,
 		}
 		createdCart, createErr := r.AddCart(ctx, newCart)
@@ -212,6 +214,20 @@ func (r *cartRepository) GetCartByUserID(ctx context.Context, userID string) (*m
 			return nil, nil
 		}
 		return nil, result.Error
+	}
+	return &cart, nil
+}
+
+func (r *cartRepository) GetByUserIDWithItems(ctx context.Context, userID string) (*models.Cart, error) {
+	var cart models.Cart
+	if err := r.db.WithContext(ctx).
+		Preload("CartItems.Product"). // Preload Product related to CartItem
+		Where("user_id = ?", userID).
+		First(&cart).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get cart by user ID with items: %w", err)
 	}
 	return &cart, nil
 }

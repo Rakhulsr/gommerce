@@ -31,13 +31,18 @@ func init() {
 
 func main() {
 
-	configs.LoadEnv()
+	env := configs.LoadEnv()
 	if len(os.Args) > 1 {
 		cmd.RunCli()
 		return
 	}
 
 	rand.Seed(time.Now().UnixNano())
+
+	log.Printf("Loaded API_ONGKIR_KEY_KOMERCE: '%s'", env.API_ONGKIR_KEY_KOMERCE)
+	if env.API_ONGKIR_KEY_KOMERCE == "" {
+		log.Fatalf("API_ONGKIR_KEY_KOMERCE is empty! Please check your .env file.")
+	}
 
 	db, err := configs.OpenConnection()
 	if err != nil {

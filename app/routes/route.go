@@ -3,6 +3,7 @@ package routes
 import (
 	"log"
 	"net/http"
+	"strconv"
 
 	"github.com/Rakhulsr/go-ecommerce/app/configs"
 	"github.com/Rakhulsr/go-ecommerce/app/handlers"
@@ -20,10 +21,10 @@ import (
 
 func NewRouter(db *gorm.DB) *mux.Router {
 	configs.InitMidtransClient()
+	env := configs.LoadEnv()
 
 	router := mux.NewRouter()
 	render := renderer.New()
-	env := configs.LoadENV
 
 	sessionKeys, err := configs.LoadSessionKeysFromEnv()
 	if err != nil {
@@ -42,7 +43,7 @@ func NewRouter(db *gorm.DB) *mux.Router {
 	orderCustomerRepo := repositories.NewOrderCustomerRepository(db)
 
 	cartSvc := services.NewCartService(cartRepo, cartItemRepo, productRepo, db)
-	komerceShippingSvc := services.NewKomerceRajaOngkirService()
+	komerceShippingSvc := services.NewKomerceRajaOngkirClient(env.API_ONGKIR_KEY_KOMERCE)
 
 	sessionStore := sessions.NewCookieSessionStore(sessionKeys.AuthKey, sessionKeys.EncKey)
 	emailConfig := services.Config{
@@ -56,11 +57,14 @@ func NewRouter(db *gorm.DB) *mux.Router {
 	validate := validator.New()
 	checkoutSvc := services.NewCheckoutService(db, cartRepo, cartItemRepo, productRepo, userRepo, addressRepo, orderRepo, orderItemRepo, orderCustomerRepo)
 
+	originID, _ := strconv.Atoi(env.API_ONGKIR_ORIGIN)
+
 	productHandler := handlers.NewProductHandler(productRepo, categoryRepo, render)
 	homeHandler := handlers.NewHomeHandler(render, categoryRepo, productRepo)
-	komerceCartHandler := handlers.NewKomerceCartHandler(productRepo, cartRepo, render, cartItemRepo, komerceShippingSvc, userRepo, addressRepo, cartSvc)
+	komerceCartHandler := handlers.NewKomerceCartHandler(productRepo, cartRepo, render, cartItemRepo, komerceShippingSvc, userRepo, addressRepo, cartSvc, originID)
 
 	authHandler := handlers.NewAuthHandler(render, userRepo, cartRepo, sessionStore, mailer, validate)
+	// Inisialisasi KomerceAddressHandler tanpa locationRepo
 	komerceAddressHandler := handlers.NewKomerceAddressHandler(render, addressRepo, userRepo, komerceShippingSvc, validate)
 
 	adminHandler := admin.NewAdminHandler(render, validate, productRepo, categoryRepo, sectionRepo, userRepo, cartRepo, cartItemRepo, *cartSvc)
@@ -84,7 +88,7 @@ func NewRouter(db *gorm.DB) *mux.Router {
 	router.HandleFunc("/carts", komerceCartHandler.GetCart).Methods("GET")
 	router.HandleFunc("/carts/add", komerceCartHandler.AddItemCart).Methods("POST")
 	router.HandleFunc("/carts/update", komerceCartHandler.UpdateCartItem).Methods("POST")
-	router.HandleFunc("/carts/delete", komerceCartHandler.DeleteCartItem).Methods("POST")
+	router.HandleFunc("/carts/delete", komerceCartHandler.DeleteCartItem).Methods("POST", "DELETE")
 
 	router.HandleFunc("/login", authHandler.LoginGetHandler).Methods("GET")
 	router.HandleFunc("/login", authHandler.LoginPostHandler).Methods("POST")
@@ -101,7 +105,18 @@ func NewRouter(db *gorm.DB) *mux.Router {
 	authenticated.Use(mux.MiddlewareFunc(middlewares.AuthRequiredMiddleware))
 
 	apiKomerceRouter := router.PathPrefix("/api/komerce").Subrouter()
-	apiKomerceRouter.HandleFunc("/calculate-shipping-cost", komerceCheckoutHandler.CalculateShippingCostKomerce).Methods("POST")
+	apiKomerceRouter.HandleFunc("/calculate-shipping-cost", komerceCartHandler.CalculateShippingCost).Methods("POST")
+
+	// --- PERUBAHAN KRUSIAL DI SINI ---
+	// Hapus routes lama untuk lokasi granular
+	// apiKomerceRouter.HandleFunc("/provinces", komerceAddressHandler.GetProvinces).Methods("GET")
+	// apiKomerceRouter.HandleFunc("/cities", komerceAddressHandler.GetCitiesByProvince).Methods("GET")
+	// apiKomerceRouter.HandleFunc("/districts", komerceAddressHandler.GetDistrictsByCity).Methods("GET")
+	// apiKomerceRouter.HandleFunc("/subdistricts", komerceAddressHandler.GetSubdistrictsByDistrict).Methods("GET")
+
+	// Tambahkan route baru untuk pencarian lokasi (autocomplete)
+	apiKomerceRouter.HandleFunc("/search-destinations", komerceAddressHandler.SearchDomesticDestinationsHandler).Methods("GET")
+	// --- AKHIR PERUBAHAN KRUSIAL ---
 
 	authenticated.HandleFunc("/profile", authHandler.ProfileHandler).Methods("GET")
 	authenticated.HandleFunc("/profile/edit", authHandler.UpdateProfilePost).Methods("POST", "PUT")

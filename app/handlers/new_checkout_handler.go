@@ -84,11 +84,16 @@ func (h *KomerceCheckoutHandler) DisplayCheckoutConfirmation(w http.ResponseWrit
 		return
 	}
 
-	addressID := r.PostFormValue("addressid")
+	// --- PERBAIKAN NAMA FIELD ---
+	addressID := r.PostFormValue("selected_address_id") // Diperbaiki
 	shippingCostStr := r.PostFormValue("shipping_cost")
-	shippingServiceCode := r.PostFormValue("shippingservicecode")
-	shippingServiceName := r.PostFormValue("shippingservicename")
+	shippingServiceCode := r.PostFormValue("shipping_service_code") // Diperbaiki
+	shippingServiceName := r.PostFormValue("shipping_service_name") // Diperbaiki
 	finalTotalPriceStr := r.PostFormValue("final_total_price")
+	// --- AKHIR PERBAIKAN ---
+
+	log.Printf("DisplayCheckoutConfirmation: Received data - AddressID: %s, ShippingCost: %s, ServiceCode: %s, ServiceName: %s, FinalTotalPrice: %s",
+		addressID, shippingCostStr, shippingServiceCode, shippingServiceName, finalTotalPriceStr)
 
 	if addressID == "" || shippingCostStr == "" || shippingServiceCode == "" || shippingServiceName == "" || finalTotalPriceStr == "" {
 		log.Printf("DisplayCheckoutConfirmation: Data checkout tidak lengkap. AddressID: '%s', ShippingCost: '%s', ServiceCode: '%s', ServiceName: '%s', FinalTotalPrice: '%s'",
@@ -153,11 +158,13 @@ func (h *KomerceCheckoutHandler) InitiateMidtransTransactionPost(w http.Response
 		return
 	}
 
-	addressID := r.PostFormValue("addressid")
+	// --- PERBAIKAN NAMA FIELD ---
+	addressID := r.PostFormValue("selected_address_id") // Diperbaiki
 	shippingCostStr := r.PostFormValue("shipping_cost")
-	shippingServiceCode := r.PostFormValue("shippingservicecode")
-	shippingServiceName := r.PostFormValue("shippingservicename")
+	shippingServiceCode := r.PostFormValue("shipping_service_code") // Diperbaiki
+	shippingServiceName := r.PostFormValue("shipping_service_name") // Diperbaiki
 	finalTotalPriceStr := r.PostFormValue("final_total_price")
+	// --- AKHIR PERBAIKAN ---
 
 	log.Printf("InitiateMidtransTransactionPost: Received data - AddressID: %s, ShippingCost: %s, ServiceCode: %s, ServiceName: %s, FinalTotalPrice: %s",
 		addressID, shippingCostStr, shippingServiceCode, shippingServiceName, finalTotalPriceStr)
@@ -222,6 +229,8 @@ func (h *KomerceCheckoutHandler) InitiateMidtransTransactionPost(w http.Response
 	}
 
 	helpers.ClearCartIDFromSession(w, r, h.sessionStore)
+	log.Printf("DisplayCheckoutConfirmation: Received data - AddressID: %s, ShippingCost: %s, ServiceCode: %s, ServiceName: %s, FinalTotalPrice: %s",
+		addressID, shippingCostStr, shippingServiceCode, shippingServiceName, finalTotalPriceStr)
 
 	log.Printf("Redirecting to Midtrans Snap URL: %s", snapRedirectURL)
 	http.Redirect(w, r, snapRedirectURL, http.StatusSeeOther)
@@ -410,7 +419,10 @@ func (h *KomerceCheckoutHandler) CalculateShippingCostKomerce(w http.ResponseWri
 
 	log.Printf("CalculateShippingCostKomerce: Menghitung biaya pengiriman dari %s ke %s untuk berat %d dengan kurir %s", originID, destinationID, weight, courier)
 
-	costs, err := h.komerceLocationSvc.GetDomesticShippingCost(ctx, originID, destinationID, weight, courier)
+	originIDInt, _ := strconv.Atoi(originID)
+	destinationIdInt, _ := strconv.Atoi(destinationID)
+
+	costs, err := h.komerceLocationSvc.CalculateCost(ctx, originIDInt, destinationIdInt, weight, courier)
 	if err != nil {
 		log.Printf("CalculateShippingCostKomerce: Gagal menghitung biaya pengiriman dari Komerce API: %v", err)
 		h.render.JSON(w, http.StatusInternalServerError, map[string]interface{}{

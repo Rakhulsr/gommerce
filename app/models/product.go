@@ -21,7 +21,7 @@ type Product struct {
 	DiscountPercent decimal.Decimal `gorm:"type:decimal(10,2);default:0.00"`
 	DiscountAmount  decimal.Decimal `gorm:"type:decimal(16,2);default:0.00"`
 	Categories      []Category      `gorm:"many2many:product_categories;"`
-	ProductImages   []ProductImage
+	ProductImages   []ProductImage  `gorm:"foreignKey:ProductID"`
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
 	DeletedAt       gorm.DeletedAt `gorm:"index"`

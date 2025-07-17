@@ -1,19 +1,23 @@
 package other
 
-type KomerceMeta struct {
-	Message string `json:"message"`
+type Meta struct {
 	Code    int    `json:"code"`
 	Status  string `json:"status"`
+	Message string `json:"message"`
 }
 
-type KomerceSearchDestinationResponse struct {
-	Meta KomerceMeta                  `json:"meta"`
-	Data []KomerceDomesticDestination `json:"data"`
+type KomerceCostDetail struct {
+	Name        string `json:"name"`
+	Code        string `json:"code"`
+	Service     string `json:"service"`
+	Description string `json:"description"`
+	Cost        int    `json:"cost"`
+	Etd         string `json:"etd"`
 }
 
-type KomerceSingleDestinationResponse struct {
-	Meta KomerceMeta                `json:"meta"`
-	Data KomerceDomesticDestination `json:"data"`
+type KomerceShippingCostResponse struct {
+	Meta Meta                `json:"meta"`
+	Data []KomerceCostDetail `json:"data"`
 }
 
 type KomerceDomesticDestination struct {
@@ -23,46 +27,12 @@ type KomerceDomesticDestination struct {
 	CityName        string `json:"city_name"`
 	DistrictName    string `json:"district_name"`
 	SubdistrictName string `json:"subdistrict_name"`
+	Type            string `json:"type"`
 	ZipCode         string `json:"zip_code"`
+	IsCapital       int    `json:"is_capital"`
 }
 
-type DropdownItem struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-}
-
-type KomerceShippingCostResponse struct {
-	Meta KomerceMeta            `json:"meta"`
-	Data []KomerceCourierResult `json:"data"`
-}
-
-type KomerceCostData struct {
-	OriginDetails      KomerceOriginDestination `json:"origin_details"`
-	DestinationDetails KomerceOriginDestination `json:"destination_details"`
-	Results            []KomerceCourierResult   `json:"results"`
-}
-
-type KomerceOriginDestination struct {
-	SubdistrictID string `json:"subdistrict_id"`
-	ProvinceID    string `json:"province_id"`
-	Province      string `json:"province"`
-	City          string `json:"city"`
-	Type          string `json:"type"`
-	Subdistrict   string `json:"subdistrict"`
-}
-
-type KomerceCourierResult struct {
-	Code  string              `json:"code"`
-	Name  string              `json:"name"`
-	Costs []KomerceCostResult `json:"costs"`
-}
-
-type KomerceCostResult struct {
-	Service     string `json:"service"`
-	Description string `json:"description"`
-	Cost        []struct {
-		Value int    `json:"value"`
-		Etd   string `json:"etd"`
-		Note  string `json:"note"`
-	} `json:"cost"`
+type KomerceDomesticDestinationResponse struct {
+	Meta Meta                         `json:"meta"`
+	Data []KomerceDomesticDestination `json:"data"`
 }

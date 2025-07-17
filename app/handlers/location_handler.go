@@ -1,200 +1,378 @@
 package handlers
 
 // import (
+// 	"encoding/json" // Import for JSON handling
 // 	"fmt"
 // 	"log"
 // 	"net/http"
+// 	"net/url"
+// 	"os" // Import for os.Getenv
 // 	"strconv"
 
+// 	"github.com/Rakhulsr/go-ecommerce/app/helpers"
+// 	"github.com/Rakhulsr/go-ecommerce/app/models"
+// 	"github.com/Rakhulsr/go-ecommerce/app/models/other"
+// 	"github.com/Rakhulsr/go-ecommerce/app/repositories"
 // 	"github.com/Rakhulsr/go-ecommerce/app/services"
+// 	"github.com/Rakhulsr/go-ecommerce/app/utils/breadcrumb"
+// 	"github.com/Rakhulsr/go-ecommerce/app/utils/calc"
+// 	"github.com/shopspring/decimal"
 // 	"github.com/unrolled/render"
 // )
 
-// type KomerceLocationAPIHandler struct {
-// 	komerceLocationSvc services.KomerceRajaOngkirClient
+// type KomerceCartHandler struct {
+// 	productRepo        repositories.ProductRepositoryImpl
+// 	cartRepo           repositories.CartRepositoryImpl
+// 	cartItemRepo       repositories.CartItemRepositoryImpl
 // 	render             *render.Render
+// 	komerceLocationSvc services.KomerceRajaOngkirClient // Ini adalah client untuk RajaOngkir
+// 	userRepo           repositories.UserRepositoryImpl
+// 	addressRepo        repositories.AddressRepository
+// 	cartSvc            *services.CartService
 // }
 
-// func NewKomerceLocationAPIHandler(
-// 	komerceLocationSvc services.KomerceRajaOngkirClient,
+// func NewKomerceCartHandler(
+// 	productRepo repositories.ProductRepositoryImpl,
+// 	cartRepo repositories.CartRepositoryImpl,
 // 	render *render.Render,
-// ) *KomerceLocationAPIHandler {
-// 	return &KomerceLocationAPIHandler{
-// 		komerceLocationSvc: komerceLocationSvc,
+// 	cartItemRepo repositories.CartItemRepositoryImpl,
+// 	komerceLocationSvc services.KomerceRajaOngkirClient,
+// 	userRepo repositories.UserRepositoryImpl,
+// 	addressRepo repositories.AddressRepository,
+// 	cartSvc *services.CartService,
+// ) *KomerceCartHandler {
+// 	return &KomerceCartHandler{
+// 		productRepo:        productRepo,
+// 		cartRepo:           cartRepo,
+// 		cartItemRepo:       cartItemRepo,
 // 		render:             render,
+// 		komerceLocationSvc: komerceLocationSvc,
+// 		userRepo:           userRepo,
+// 		addressRepo:        addressRepo,
+// 		cartSvc:            cartSvc,
 // 	}
 // }
 
-// func (h *KomerceLocationAPIHandler) SearchDomesticDestinationAPI(w http.ResponseWriter, r *http.Request) {
+// func (h *KomerceCartHandler) GetCart(w http.ResponseWriter, r *http.Request) {
 // 	ctx := r.Context()
-// 	keyword := r.URL.Query().Get("keyword")
-
-// 	if keyword == "" {
-// 		h.render.JSON(w, http.StatusBadRequest, map[string]interface{}{
-// 			"status":  "error",
-// 			"message": "Keyword pencarian tidak boleh kosong.",
-// 			"data":    []interface{}{},
-// 		})
+// 	userID, userOk := ctx.Value(helpers.ContextKeyUserID).(string)
+// 	if !userOk || userID == "" {
+// 		log.Printf("KomerceCartHandler.GetCart: UserID not found in context. Rendering empty cart for non-logged in user.")
+// 		h.renderEmptyCart(w, r, "info", "Keranjang Anda kosong. Mohon login untuk menyimpan keranjang Anda.")
 // 		return
 // 	}
 
-// 	destinations, err := h.komerceLocationSvc.SearchDomesticDestination(ctx, keyword)
+// 	cart, err := h.cartSvc.GetUserCart(ctx, userID)
 // 	if err != nil {
-// 		log.Printf("SearchDomesticDestinationAPI: Gagal mencari destinasi dari Komerce API: %v", err)
-// 		h.render.JSON(w, http.StatusInternalServerError, map[string]interface{}{
-// 			"status":  "error",
-// 			"message": fmt.Sprintf("Gagal mencari destinasi: %v", err),
-// 			"data":    []interface{}{},
-// 		})
+// 		log.Printf("KomerceCartHandler.GetCart: Gagal mengambil data cart untuk user %s: %v", userID, err)
+// 		http.Error(w, "Gagal mengambil data cart", http.StatusInternalServerError)
 // 		return
 // 	}
 
-// 	h.render.JSON(w, http.StatusOK, map[string]interface{}{
-// 		"status":  "success",
-// 		"message": "Destinasi berhasil ditemukan.",
-// 		"data":    destinations,
-// 	})
+// 	if cart == nil || len(cart.CartItems) == 0 {
+// 		log.Printf("KomerceCartHandler.GetCart: Cart for user %s is empty or not found after service call. Rendering empty cart.", userID)
+// 		h.renderEmptyCart(w, r, "info", "Keranjang Anda kosong.")
+// 		return
+// 	}
+
+// 	status := r.URL.Query().Get("status")
+// 	message := r.URL.Query().Get("message")
+
+// 	var userAddresses []models.Address
+// 	userWithAddresses, err := h.userRepo.GetUserByIDWithAddresses(ctx, userID)
+// 	if err != nil {
+// 		log.Printf("KomerceCartHandler.GetCart: Gagal mengambil user dengan alamat untuk user %s: %v", userID, err)
+// 	} else if userWithAddresses != nil {
+// 		userAddresses = userWithAddresses.Address
+// 	} else {
+// 		log.Printf("KomerceCartHandler.GetCart: UserID tidak ditemukan di konteks untuk memuat alamat.")
+// 	}
+
+// 	supportedCouriers := []other.Courier{
+// 		{Code: "jne", Name: "JNE"},
+// 		{Code: "tiki", Name: "TIKI"},
+// 		{Code: "pos", Name: "POS"},
+// 	}
+
+// 	// Ambil OriginLocationID dari environment variable
+// 	originLocationID := os.Getenv("RAJAONGKIR_ORIGIN_LOCATION_ID")
+// 	if originLocationID == "" {
+// 		originLocationID = "25986" // Default ke Depok (contoh) jika tidak diatur
+// 		log.Println("RAJAONGKIR_ORIGIN_LOCATION_ID tidak diatur, menggunakan default Depok (25986)")
+// 	}
+
+// 	pageSpecificData := map[string]interface{}{
+// 		"title":                 "Keranjang Belanja",
+// 		"cart":                  cart,
+// 		"totalWeight":           cart.TotalWeight,
+// 		"baseTotalPrice":        cart.BaseTotalPrice,
+// 		"totalDiscountAmount":   cart.DiscountAmount,
+// 		"taxAmount":             cart.TaxAmount,
+// 		"taxPercent":            cart.TaxPercent,
+// 		"grandTotal":            cart.GrandTotal,
+// 		"Breadcrumbs":           []breadcrumb.Breadcrumb{{Name: "Home", URL: "/"}, {Name: "Carts", URL: "/carts"}},
+// 		"MessageStatus":         status,
+// 		"Message":               message,
+// 		"couriers":              supportedCouriers,
+// 		"OriginLocationID":      originLocationID,
+// 		"finalPrice":            cart.GrandTotal,
+// 		"GrandTotalAmountForJS": cart.GrandTotal.InexactFloat64(),
+// 		"Addresses":             userAddresses,
+// 	}
+
+// 	datas := helpers.GetBaseData(r, pageSpecificData)
+// 	_ = h.render.HTML(w, http.StatusOK, "carts", datas)
 // }
 
-// func (h *KomerceLocationAPIHandler) GetDomesticDestinationByIDAPI(w http.ResponseWriter, r *http.Request) {
-// 	// Fungsi ini tidak lagi memanggil GetDomesticDestinationByID dari service.
-// 	// Endpoint ini mungkin tidak diperlukan lagi jika detail lokasi tidak diambil berdasarkan ID.
-// 	// Namun, jika ada bagian lain dari aplikasi yang masih memanggilnya,
-// 	// kita bisa mengembalikan respons error atau data kosong.
-// 	// Untuk saat ini, saya akan mengembalikan 400 Bad Request karena Location ID tidak dapat diverifikasi secara langsung.
-// 	log.Println("GetDomesticDestinationByIDAPI: Endpoint ini tidak lagi didukung untuk pencarian detail berdasarkan ID.")
-// 	h.render.JSON(w, http.StatusBadRequest, map[string]interface{}{
-// 		"status":  "error",
-// 		"message": "Pencarian detail destinasi berdasarkan ID tidak lagi didukung secara langsung.",
-// 		"data":    nil,
-// 	})
-// 	return
-// }
-
-// func (h *KomerceLocationAPIHandler) CalculateShippingCostKomerce(w http.ResponseWriter, r *http.Request) {
+// func (h *KomerceCartHandler) renderEmptyCart(w http.ResponseWriter, r *http.Request, status, message string) {
 // 	ctx := r.Context()
+// 	emptyCart := &models.Cart{
+// 		BaseTotalPrice:  decimal.Zero,
+// 		TaxAmount:       decimal.Zero,
+// 		TaxPercent:      calc.GetTaxPercent(),
+// 		DiscountAmount:  decimal.Zero,
+// 		DiscountPercent: decimal.Zero,
+// 		GrandTotal:      decimal.Zero,
+// 		TotalWeight:     decimal.Zero,
+// 		ShippingCost:    decimal.Zero,
+// 		TotalItems:      0,
+// 		CartItems:       []models.CartItem{},
+// 	}
+
+// 	userID, userOk := ctx.Value(helpers.ContextKeyUserID).(string)
+// 	var userAddresses []models.Address
+// 	if userOk && userID != "" {
+// 		userWithAddresses, err := h.userRepo.GetUserByIDWithAddresses(ctx, userID)
+// 		if err != nil {
+// 			log.Printf("KomerceCartHandler.renderEmptyCart: Gagal mengambil user dengan alamat untuk user %s: %v", userID, err)
+// 		} else if userWithAddresses != nil {
+// 			userAddresses = userWithAddresses.Address
+// 		}
+// 	} else {
+// 		log.Printf("KomerceCartHandler.renderEmptyCart: UserID tidak ditemukan di konteks untuk memuat alamat.")
+// 	}
+
+// 	supportedCouriers := []other.Courier{
+// 		{Code: "jne", Name: "JNE"},
+// 		{Code: "tiki", Name: "TIKI"},
+// 		{Code: "pos", Name: "POS"},
+// 	}
+
+// 	originLocationID := os.Getenv("RAJAONGKIR_ORIGIN_LOCATION_ID")
+// 	if originLocationID == "" {
+// 		originLocationID = "25986" // Default ke Depok (contoh) jika tidak diatur
+// 		log.Println("RAJAONGKIR_ORIGIN_LOCATION_ID tidak diatur, menggunakan default Depok (25986)")
+// 	}
+
+// 	pageSpecificData := map[string]interface{}{
+// 		"title":                 "Keranjang Belanja",
+// 		"cart":                  emptyCart,
+// 		"totalWeight":           emptyCart.TotalWeight,
+// 		"baseTotalPrice":        emptyCart.BaseTotalPrice,
+// 		"totalDiscountAmount":   emptyCart.DiscountAmount,
+// 		"taxAmount":             emptyCart.TaxAmount,
+// 		"taxPercent":            emptyCart.TaxPercent,
+// 		"grandTotal":            emptyCart.GrandTotal,
+// 		"Breadcrumbs":           []breadcrumb.Breadcrumb{{Name: "Home", URL: "/"}, {Name: "Keranjang Belanja", URL: "/carts"}},
+// 		"MessageStatus":         status,
+// 		"Message":               message,
+// 		"couriers":              supportedCouriers,
+// 		"OriginLocationID":      originLocationID,
+// 		"finalPrice":            emptyCart.GrandTotal,
+// 		"GrandTotalAmountForJS": emptyCart.GrandTotal.InexactFloat64(),
+// 		"Addresses":             userAddresses,
+// 	}
+
+// 	datas := helpers.GetBaseData(r, pageSpecificData)
+// 	_ = h.render.HTML(w, http.StatusOK, "carts", datas)
+// }
+
+// func (h *KomerceCartHandler) AddItemCart(w http.ResponseWriter, r *http.Request) {
 // 	if err := r.ParseForm(); err != nil {
-// 		log.Printf("CalculateShippingCostKomerce: Error parsing form: %v", err)
-// 		h.render.JSON(w, http.StatusBadRequest, map[string]interface{}{
-// 			"status":  "error",
-// 			"message": "Gagal membaca data form.",
-// 		})
+// 		http.Error(w, "Gagal membaca data", http.StatusBadRequest)
 // 		return
 // 	}
 
-// 	originID := r.FormValue("origin_id")
-// 	destinationID := r.FormValue("destination_id")
-// 	weightStr := r.FormValue("weight")
-// 	courier := r.FormValue("courier")
+// 	productID := r.FormValue("product_id")
+// 	qtyStr := r.FormValue("qty")
+// 	action := r.FormValue("action")
 
-// 	if originID == "" || destinationID == "" || weightStr == "" || courier == "" {
-// 		log.Printf("CalculateShippingCostKomerce: Data tidak lengkap. OriginID: %s, DestinationID: %s, Weight: %s, Courier: %s", originID, destinationID, weightStr, courier)
-// 		h.render.JSON(w, http.StatusBadRequest, map[string]interface{}{
-// 			"status":  "error",
-// 			"message": "Data pengiriman tidak lengkap. Mohon isi semua field yang wajib.",
-// 		})
+// 	log.Println("KomerceCartHandler.AddItemCart - Product ID:", productID)
+// 	log.Println("KomerceCartHandler.AddItemCart - Qty:", qtyStr)
+// 	log.Println("KomerceCartHandler.AddItemCart - Action:", action)
+
+// 	if productID == "" || qtyStr == "" {
+// 		log.Printf("KomerceCartHandler.AddItemCart: Data tidak lengkap (productID: '%s', qtyStr: '%s')", productID, qtyStr)
+// 		redirectBackWithError(w, r, productID, "Data produk atau kuantitas tidak lengkap.", "error", h.productRepo)
 // 		return
 // 	}
 
-// 	weight, err := strconv.Atoi(weightStr)
-// 	if err != nil || weight <= 0 {
-// 		log.Printf("CalculateShippingCostKomerce: Berat tidak valid: %s, error: %v", weightStr, err)
-// 		h.render.JSON(w, http.StatusBadRequest, map[string]interface{}{
-// 			"status":  "error",
-// 			"message": "Berat tidak valid, harus berupa angka positif.",
-// 		})
+// 	qty, err := strconv.Atoi(qtyStr)
+// 	if err != nil || qty <= 0 {
+// 		log.Printf("KomerceCartHandler.AddItemCart: Jumlah tidak valid (qtyStr: '%s', error: %v)", qtyStr, err)
+// 		redirectBackWithError(w, r, productID, "Jumlah tidak valid, harus lebih dari 0.", "error", h.productRepo)
 // 		return
 // 	}
 
-// 	log.Printf("CalculateShippingCostKomerce: Menghitung biaya pengiriman dari %s ke %s untuk berat %d dengan kurir %s", originID, destinationID, weight, courier)
+// 	product, err := h.productRepo.GetByID(r.Context(), productID)
+// 	if err != nil || product == nil {
+// 		log.Printf("KomerceCartHandler.AddItemCart: Produk tidak ditemukan: %v", err)
+// 		redirectBackWithError(w, r, productID, "Produk tidak ditemukan.", "error", h.productRepo)
+// 		return
+// 	}
 
-// 	costs, err := h.komerceLocationSvc.GetDomesticShippingCost(ctx, originID, destinationID, weight, courier)
+// 	cartID, _ := r.Context().Value(helpers.ContextKeyCartID).(string)
+// 	userID, userOk := r.Context().Value(helpers.ContextKeyUserID).(string)
+
+// 	if !userOk || userID == "" {
+// 		log.Printf("KomerceCartHandler.AddItemCart: UserID not found in context. Redirecting to login.")
+// 		redirectBackWithError(w, r, productID, "Anda harus login untuk menambahkan produk ke keranjang.", "warning", h.productRepo)
+// 		return
+// 	}
+
+// 	err = h.cartSvc.AddItemToCart(r.Context(), cartID, userID, productID, qty)
 // 	if err != nil {
-// 		log.Printf("CalculateShippingCostKomerce: Gagal menghitung biaya pengiriman dari Komerce API: %v", err)
+// 		log.Printf("KomerceCartHandler.AddItemCart: Gagal menambahkan item ke keranjang melalui service: %v", err)
+// 		redirectBackWithError(w, r, productID, fmt.Sprintf("Gagal menambahkan produk ke keranjang: %v", err), "error", h.productRepo)
+// 		return
+// 	}
+
+// 	switch action {
+// 	case "buy":
+// 		http.Redirect(w, r, fmt.Sprintf("/carts?status=success&message=%s", url.QueryEscape("Item berhasil ditambahkan ke keranjang!")), http.StatusSeeOther)
+// 		return
+// 	default:
+// 		http.Redirect(w, r, fmt.Sprintf("/products/%s?status=success&message=%s", product.Slug, url.QueryEscape("Item berhasil ditambahkan ke keranjang!")), http.StatusSeeOther)
+// 	}
+// }
+
+// func (h *KomerceCartHandler) UpdateCartItem(w http.ResponseWriter, r *http.Request) {
+// 	productID := r.FormValue("product_id")
+// 	qtyStr := r.FormValue("qty")
+
+// 	qty, err := strconv.Atoi(qtyStr)
+// 	if err != nil {
+// 		http.Redirect(w, r, fmt.Sprintf("/carts?status=error&message=%s", url.QueryEscape("Kuantitas tidak valid!")), http.StatusSeeOther)
+// 		return
+// 	}
+
+// 	userID, userOk := r.Context().Value(helpers.ContextKeyUserID).(string)
+// 	if !userOk || userID == "" {
+// 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+// 		return
+// 	}
+
+// 	updatedCart, err := h.cartSvc.UpdateCartItemQty(r.Context(), userID, productID, qty)
+// 	if err != nil {
+// 		log.Printf("KomerceCartHandler.UpdateCartItem: Gagal memperbarui item keranjang melalui service: %v", err)
+// 		http.Redirect(w, r, fmt.Sprintf("/carts?status=error&message=%s", url.QueryEscape(fmt.Sprintf("Gagal memperbarui item: %v", err))), http.StatusSeeOther)
+// 		return
+// 	}
+
+// 	if updatedCart == nil || len(updatedCart.CartItems) == 0 {
+// 		http.Redirect(w, r, fmt.Sprintf("/carts?status=success&message=%s", url.QueryEscape("Item berhasil dihapus atau kuantitas diubah menjadi nol!")), http.StatusSeeOther)
+// 		return
+// 	}
+
+// 	http.Redirect(w, r, fmt.Sprintf("/carts?status=success&message=%s", url.QueryEscape("Kuantitas item keranjang berhasil diperbarui!")), http.StatusSeeOther)
+// }
+
+// func (h *KomerceCartHandler) DeleteCartItem(w http.ResponseWriter, r *http.Request) {
+// 	productID := r.FormValue("product_id")
+// 	if productID == "" {
+// 		http.Error(w, "Produk tidak valid", http.StatusBadRequest)
+// 		return
+// 	}
+
+// 	userID, userOk := r.Context().Value(helpers.ContextKeyUserID).(string)
+// 	if !userOk || userID == "" {
+// 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+// 		return
+// 	}
+
+// 	updatedCart, err := h.cartSvc.RemoveItemFromCart(r.Context(), userID, productID)
+// 	if err != nil {
+// 		log.Printf("KomerceCartHandler.DeleteCartItem: Gagal menghapus item keranjang melalui service: %v", err)
+// 		http.Redirect(w, r, fmt.Sprintf("/carts?status=error&message=%s", url.QueryEscape(fmt.Sprintf("Gagal menghapus item: %v", err))), http.StatusSeeOther)
+// 		return
+// 	}
+
+// 	if updatedCart == nil || len(updatedCart.CartItems) == 0 {
+// 		http.Redirect(w, r, fmt.Sprintf("/carts?status=success&message=%s", url.QueryEscape("Item berhasil dihapus dan keranjang kosong!")), http.StatusSeeOther)
+// 		return
+// 	}
+
+// 	http.Redirect(w, r, fmt.Sprintf("/carts?status=success&message=%s", url.QueryEscape("Item keranjang berhasil dihapus!")), http.StatusSeeOther)
+// }
+
+// // CalculateShippingCost handles the AJAX request to calculate shipping costs
+// func (h *KomerceCartHandler) CalculateShippingCost(w http.ResponseWriter, r *http.Request) {
+// 	if r.Method != http.MethodPost {
+// 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+// 		return
+// 	}
+
+// 	var req struct {
+// 		OriginID      string  `json:"origin_id"`
+// 		DestinationID string  `json:"destination_id"`
+// 		Weight        float64 `json:"weight"`
+// 		Courier       string  `json:"courier"`
+// 	}
+
+// 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+// 		log.Printf("CalculateShippingCost: Gagal decode request body: %v", err)
+// 		http.Error(w, "Invalid request body", http.StatusBadRequest)
+// 		return
+// 	}
+
+// 	// Validasi input
+// 	if req.OriginID == "" || req.DestinationID == "" || req.Weight <= 0 || req.Courier == "" {
+// 		log.Printf("CalculateShippingCost: Invalid input: %+v", req)
+// 		h.render.JSON(w, http.StatusBadRequest, map[string]interface{}{
+// 			"success": false,
+// 			"message": "Data input tidak lengkap atau tidak valid (origin_id, destination_id, weight, courier diperlukan).",
+// 		})
+// 		return
+// 	}
+
+// 	// Panggil service KomerceRajaOngkirClient untuk menghitung biaya
+// 	// Asumsi komerceLocationSvc memiliki metode CalculateCost
+// 	costs, err := h.komerceLocationSvc.CalculateCost(req.OriginID, req.DestinationID, int(req.Weight), req.Courier)
+// 	if err != nil {
+// 		log.Printf("CalculateShippingCost: Gagal menghitung biaya pengiriman melalui service Komerce: %v", err)
 // 		h.render.JSON(w, http.StatusInternalServerError, map[string]interface{}{
-// 			"status":  "error",
-// 			"message": fmt.Sprintf("Gagal menghitung biaya pengiriman: %v", err),
+// 			"success": false,
+// 			"message": fmt.Sprintf("Gagal menghitung ongkos kirim: %v", err),
 // 		})
 // 		return
 // 	}
 
-// 	if len(costs) == 0 {
-// 		log.Printf("CalculateShippingCostKomerce: Tidak ada biaya pengiriman ditemukan untuk rute ini.")
-// 		h.render.JSON(w, http.StatusOK, map[string]interface{}{
-// 			"status":  "success",
-// 			"message": "Tidak ada biaya pengiriman ditemukan untuk rute ini.",
-// 			"data":    []interface{}{},
-// 		})
-// 		return
-// 	}
-
-// 	log.Printf("CalculateShippingCostKomerce: Berhasil menghitung %d biaya pengiriman.", len(costs))
+// 	// Kirim respons sukses
 // 	h.render.JSON(w, http.StatusOK, map[string]interface{}{
-// 		"status":  "success",
-// 		"message": "Biaya pengiriman berhasil ditemukan.",
-// 		"data":    costs,
+// 		"success": true,
+// 		"message": "Biaya pengiriman berhasil dihitung.",
+// 		"costs":   costs,
 // 	})
 // }
 
-// func (h *KomerceLocationAPIHandler) GetCitiesAPI(w http.ResponseWriter, r *http.Request) {
-// 	ctx := r.Context()
-// 	provinceName := r.URL.Query().Get("province_name")
-// 	cities, err := h.komerceLocationSvc.GetCitiesByProvince(ctx, provinceName)
-// 	if err != nil {
-// 		log.Printf("GetCitiesAPI: Gagal mengambil kota untuk provinsi '%s': %v", provinceName, err)
-// 		h.render.JSON(w, http.StatusInternalServerError, map[string]interface{}{
-// 			"status":  "error",
-// 			"message": fmt.Sprintf("Gagal mengambil daftar kota: %v", err),
-// 			"data":    []interface{}{},
-// 		})
+// func (h *KomerceCartHandler) GetCartCount(w http.ResponseWriter, r *http.Request) {
+// 	userID, userOk := r.Context().Value(helpers.ContextKeyUserID).(string)
+// 	if !userOk || userID == "" {
+// 		w.Write([]byte("0"))
 // 		return
 // 	}
-// 	h.render.JSON(w, http.StatusOK, map[string]interface{}{
-// 		"status":  "success",
-// 		"message": "Daftar kota berhasil diambil.",
-// 		"data":    cities,
-// 	})
-// }
 
-// func (h *KomerceLocationAPIHandler) GetDistrictsAPI(w http.ResponseWriter, r *http.Request) {
-// 	ctx := r.Context()
-// 	cityName := r.URL.Query().Get("city_name")
-// 	provinceName := r.URL.Query().Get("province_name")
-// 	districts, err := h.komerceLocationSvc.GetDistrictsByCity(ctx, cityName, provinceName)
+// 	cart, err := h.cartSvc.GetUserCart(r.Context(), userID)
 // 	if err != nil {
-// 		log.Printf("GetDistrictsAPI: Gagal mengambil kecamatan untuk kota '%s', provinsi '%s': %v", cityName, provinceName, err)
-// 		h.render.JSON(w, http.StatusInternalServerError, map[string]interface{}{
-// 			"status":  "error",
-// 			"message": fmt.Sprintf("Gagal mengambil daftar kecamatan: %v", err),
-// 			"data":    []interface{}{},
-// 		})
+// 		log.Printf("GetCartCount: Gagal mengambil cart untuk userID %s: %v", userID, err)
+// 		w.Write([]byte("0"))
 // 		return
 // 	}
-// 	h.render.JSON(w, http.StatusOK, map[string]interface{}{
-// 		"status":  "success",
-// 		"message": "Daftar kecamatan berhasil diambil.",
-// 		"data":    districts,
-// 	})
-// }
 
-// func (h *KomerceLocationAPIHandler) GetSubdistrictsAPI(w http.ResponseWriter, r *http.Request) {
-// 	ctx := r.Context()
-// 	districtName := r.URL.Query().Get("district_name")
-// 	cityName := r.URL.Query().Get("city_name")
-// 	provinceName := r.URL.Query().Get("province_name")
-// 	subdistricts, err := h.komerceLocationSvc.GetSubdistrictsByDistrict(ctx, districtName, cityName, provinceName)
-// 	if err != nil {
-// 		log.Printf("GetSubdistrictsAPI: Gagal mengambil kelurahan untuk kecamatan '%s', kota '%s', provinsi '%s': %v", districtName, cityName, provinceName, err)
-// 		h.render.JSON(w, http.StatusInternalServerError, map[string]interface{}{
-// 			"status":  "error",
-// 			"message": fmt.Sprintf("Gagal mengambil daftar kelurahan: %v", err),
-// 			"data":    []interface{}{},
-// 		})
+// 	if cart == nil {
+// 		w.Write([]byte("0"))
 // 		return
 // 	}
-// 	h.render.JSON(w, http.StatusOK, map[string]interface{}{
-// 		"status":  "success",
-// 		"message": "Daftar kelurahan berhasil diambil.",
-// 		"data":    subdistricts,
-// 	})
+
+// 	w.Write([]byte(strconv.Itoa(cart.TotalItems)))
 // }

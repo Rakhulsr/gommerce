@@ -48,6 +48,10 @@ func New() *render.Render {
 					}
 					f, _ := d.Float64()
 					return ac.FormatMoney(f)
+
+				},
+				"isGreaterThanZero": func(d decimal.Decimal) bool {
+					return d.GreaterThan(decimal.Zero) // Membandingkan dengan decimal.Zero di Go
 				},
 			},
 			helpers.FuncMap,

@@ -12,6 +12,7 @@ import (
 	"github.com/Rakhulsr/go-ecommerce/app/helpers"
 	"github.com/Rakhulsr/go-ecommerce/app/models"
 	"github.com/Rakhulsr/go-ecommerce/app/repositories"
+	"github.com/Rakhulsr/go-ecommerce/app/utils/calc"
 	"github.com/Rakhulsr/go-ecommerce/app/utils/sessions"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -82,7 +83,7 @@ func AuthAndCartSessionMiddleware(userRepo repositories.UserRepositoryImpl, cart
 									_ = userRepo.UpdateRememberToken(ctx, user.ID, newSelector, hashedVerifier)
 									helpers.SetCookie(w, helpers.RememberMeCookieName, newToken, 8*time.Hour)
 								}
-								_ = sessionStore.SetUserID(w, r, user.ID) // Set user ID in session
+								_ = sessionStore.SetUserID(w, r, user.ID)
 							}
 						}
 					}
@@ -201,7 +202,7 @@ func CartCountMiddleware(cartRepo repositories.CartRepositoryImpl) func(http.Han
 			// PENTING: Panggil CalculateTotals untuk memastikan TotalItems selalu diperbarui
 			// sebelum digunakan oleh middleware atau dikirim ke frontend.
 			// Ini akan menghitung ulang TotalItems berdasarkan CartItems yang dimuat.
-			cart.CalculateTotals()
+			cart.CalculateTotals(calc.GetTaxPercent())
 
 			count := cart.TotalItems
 			log.Printf("CartCountMiddleware: CartID '%s' has TotalItems: %d. Setting count in context.", cartID, count)

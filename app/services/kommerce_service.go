@@ -8,124 +8,134 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
-	"time"
+	"net/url"
+	"sync"
+	"time" // Pastikan time diimpor
 
 	"github.com/Rakhulsr/go-ecommerce/app/models/other"
 )
 
+// Global variables for in-memory caching (tetap ada sesuai strategi terakhir)
+var (
+	allDomesticDestinations      []other.KomerceDomesticDestination
+	domesticDestinationsMutex    sync.RWMutex
+	lastDomesticDestinationsSync time.Time
+)
+
 type KomerceRajaOngkirClient interface {
-	GetDomesticShippingCost(ctx context.Context, originID, destinationID string, weight int, courier string) ([]other.KomerceCostResult, error)
+	CalculateCost(ctx context.Context, originID, destinationID int, weight int, courier string) ([]other.KomerceCostDetail, error)
+	SearchDomesticDestinations(ctx context.Context, query string, limit, offset int) ([]other.KomerceDomesticDestination, error)
 }
 
 type komerceRajaOngkirService struct {
-	client  *http.Client
 	apiKey  string
+	client  *http.Client
 	baseURL string
 }
 
-func NewKomerceRajaOngkirService() KomerceRajaOngkirClient {
-	const hardcodedBaseURL = "https://rajaongkir.komerce.id/api"
-	const hardcodedAPIKey = "I1lMHC0ib9559cde0a34dd9dRs9LxUYa"
-
+func NewKomerceRajaOngkirClient(apiKey string) KomerceRajaOngkirClient {
 	return &komerceRajaOngkirService{
+		apiKey:  apiKey,
 		client:  &http.Client{Timeout: 10 * time.Second},
-		apiKey:  hardcodedAPIKey,
-		baseURL: hardcodedBaseURL,
+		baseURL: "https://rajaongkir.komerce.id/api",
 	}
 }
 
-func (s *komerceRajaOngkirService) doRequest(ctx context.Context, method, path string, payload interface{}) ([]byte, error) {
-	requestURL := fmt.Sprintf("%s%s", s.baseURL, path)
-	var reqBody []byte
-	var err error
+// doRequest helper function
+func (s *komerceRajaOngkirService) doRequest(ctx context.Context, method, fullPath string, bodyReader *bytes.Buffer, contentType string) ([]byte, error) {
 
-	if payload != nil {
-		reqBody, err = json.Marshal(payload)
-		if err != nil {
-			return nil, fmt.Errorf("gagal membuat payload JSON: %w", err)
-		}
+	fullURL := s.baseURL + fullPath
+	log.Printf("doRequest: Membuat request %s ke URL: %s dengan Content-Type: %s", method, fullURL, contentType)
+
+	// Pastikan bodyReader tidak nil, jika nil, gunakan bytes.NewBuffer(nil) atau http.NoBody
+	var reqBodyReader *bytes.Buffer
+	if bodyReader == nil {
+		reqBodyReader = bytes.NewBuffer(nil) // Gunakan buffer kosong jika bodyReader nil
+	} else {
+		reqBodyReader = bodyReader
 	}
 
-	req, err := http.NewRequestWithContext(ctx, method, requestURL, bytes.NewBuffer(reqBody))
+	req, err := http.NewRequestWithContext(ctx, method, fullURL, reqBodyReader)
 	if err != nil {
 		return nil, fmt.Errorf("gagal membuat request: %w", err)
 	}
 
-	req.Header.Add("key", s.apiKey)
-	if method == "POST" || payload != nil {
-		req.Header.Add("Content-Type", "application/json")
-	}
-
-	log.Printf("KomerceRajaOngkirService.doRequest: Requesting URL: %s", requestURL)
-	if payload != nil {
-		log.Printf("KomerceRajaOngkirService.doRequest: Request Payload: %s", string(reqBody))
-	}
-	apiKeyLog := "API Key not set or too short"
-	if len(s.apiKey) >= 5 {
-		apiKeyLog = s.apiKey[:5]
-	}
-	log.Printf("KomerceRajaOngkirService.doRequest: API Key: %s (first 5 chars)", apiKeyLog)
+	req.Header.Set("Content-Type", contentType)
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("key", s.apiKey)
 
 	resp, err := s.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("gagal melakukan request ke Komerce API: %w", err)
+		return nil, fmt.Errorf("gagal melakukan request HTTP: %w", err)
 	}
 	defer resp.Body.Close()
 
-	body, err := ioutil.ReadAll(resp.Body)
+	respBody, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("gagal membaca respons body: %w", err)
 	}
 
-	log.Printf("KomerceRajaOngkirService.doRequest: Response Status: %d, Body: %s", resp.StatusCode, string(body))
-
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("Komerce API mengembalikan status error: %d - %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("API Komerce mengembalikan status %d: %s", resp.StatusCode, string(respBody))
 	}
 
-	return body, nil
+	return respBody, nil
 }
 
-func (s *komerceRajaOngkirService) GetDomesticShippingCost(ctx context.Context, originID, destinationID string, weight int, courier string) ([]other.KomerceCostResult, error) {
-	if s.baseURL == "" {
-		return nil, fmt.Errorf("Komerce API Base URL belum diatur di service (s.baseURL kosong)")
-	}
-	if s.apiKey == "" {
-		return nil, fmt.Errorf("Komerce API Key belum diatur di service (s.apiKey kosong)")
-	}
+// CalculateCost (tidak ada perubahan)
+func (s *komerceRajaOngkirService) CalculateCost(ctx context.Context, originID, destinationID int, weight int, courier string) ([]other.KomerceCostDetail, error) {
+	formData := url.Values{}
+	formData.Add("origin", fmt.Sprintf("%d", originID))
+	formData.Add("destination", fmt.Sprintf("%d", destinationID))
+	formData.Add("weight", fmt.Sprintf("%d", weight))
+	formData.Add("courier", courier)
+	formData.Add("price", "lowest")
 
-	payload := map[string]interface{}{
-		"origin":      originID,
-		"destination": destinationID,
-		"weight":      weight,
-		"courier":     courier,
-	}
+	requestBodyReader := bytes.NewBufferString(formData.Encode())
+	contentType := "application/x-www-form-urlencoded"
 
-	body, err := s.doRequest(ctx, "POST", "/v1/cost/domestic-cost", payload)
+	log.Printf("CalculateCost: Mengirim form-urlencoded body ke Komerce API: %s", formData.Encode())
+
+	body, err := s.doRequest(ctx, "POST", "/v1/calculate/domestic-cost", requestBodyReader, contentType)
 	if err != nil {
 		return nil, err
 	}
 
 	var apiResponse other.KomerceShippingCostResponse
 	if err := json.Unmarshal(body, &apiResponse); err != nil {
-		log.Printf("KomerceRajaOngkirService.GetDomesticShippingCost: Gagal unmarshal respons JSON: %v, Body: %s", err, string(body))
-		return nil, fmt.Errorf("gagal mengurai respons JSON: %w", err)
+		return nil, fmt.Errorf("gagal mengurai respons JSON biaya pengiriman: %w", err)
 	}
 
-	if apiResponse.Meta.Code != 200 {
-		return nil, fmt.Errorf("Komerce API mengembalikan status non-200: %d - %s", apiResponse.Meta.Code, apiResponse.Meta.Message)
+	if apiResponse.Meta.Code != 200 || apiResponse.Meta.Status != "success" {
+		return nil, fmt.Errorf("API Komerce mengembalikan status error: %d - %s", apiResponse.Meta.Code, apiResponse.Meta.Message)
 	}
 
-	if len(apiResponse.Data) == 0 || len(apiResponse.Data[0].Costs) == 0 {
-		return []other.KomerceCostResult{}, nil
-	}
-
-	return apiResponse.Data[0].Costs, nil
+	return apiResponse.Data, nil
 }
 
-func min(a, b int) int {
-	if a < b {
-		return a
+// SearchDomesticDestinations (PERBAIKAN PANGGILAN doRequest)
+func (s *komerceRajaOngkirService) SearchDomesticDestinations(ctx context.Context, query string, limit, offset int) ([]other.KomerceDomesticDestination, error) {
+	params := url.Values{}
+	params.Add("search", query)
+	params.Add("limit", fmt.Sprintf("%d", limit))
+	params.Add("offset", fmt.Sprintf("%d", offset))
+
+	fullPath := fmt.Sprintf("/v1/destination/domestic-destination?%s", params.Encode())
+
+	// PERBAIKAN DI SINI: Berikan bytes.NewBuffer(nil) sebagai bodyReader untuk GET request
+	body, err := s.doRequest(ctx, "GET", fullPath, bytes.NewBuffer(nil), "application/json")
+	if err != nil {
+		return nil, err
 	}
-	return b
+
+	var apiResponse other.KomerceDomesticDestinationResponse
+	if err := json.Unmarshal(body, &apiResponse); err != nil {
+		return nil, fmt.Errorf("gagal mengurai respons JSON destinasi domestik: %w", err)
+	}
+
+	if apiResponse.Meta.Code != 200 || apiResponse.Meta.Status != "success" {
+		return nil, fmt.Errorf("API Komerce mengembalikan status error: %d - %s", apiResponse.Meta.Code, apiResponse.Meta.Message)
+	}
+
+	return apiResponse.Data, nil
 }

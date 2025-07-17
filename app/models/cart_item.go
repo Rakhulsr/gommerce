@@ -3,23 +3,30 @@ package models
 import (
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
+	"gorm.io/gorm"
 )
 
 type CartItem struct {
-	ID         string `gorm:"size:36;not null;uniqueIndex;primary_key"`
-	Cart       *Cart
-	CartID     string `gorm:"size:36;index"`
-	Product    *Product
-	ProductID  string `gorm:"size:36;index"`
-	Qty        int
-	BasePrice  decimal.Decimal `gorm:"type:decimal(16,2);"`
-	BaseTotal  decimal.Decimal `gorm:"type:decimal(16,2);"`
-	TaxAmount  decimal.Decimal `gorm:"type:decimal(16,2);"`
-	TaxPercent decimal.Decimal `gorm:"type:decimal(10,2);"`
-	GrandTotal decimal.Decimal `gorm:"type:decimal(16,2);"`
-	SubTotal   decimal.Decimal `gorm:"type:decimal(16,2);"`
-	TotalPrice decimal.Decimal `gorm:"type:decimal(16,2);"`
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
+	ID              string   `gorm:"size:36;not null;uniqueIndex;primary_key" json:"id"`
+	Cart            *Cart    `gorm:"foreignKey:CartID"`
+	CartID          string   `gorm:"size:36;index"`
+	Product         *Product `gorm:"foreignKey:ProductID"`
+	ProductID       string   `gorm:"size:36;index"`
+	Qty             int
+	Price           decimal.Decimal `gorm:"type:decimal(16,2);"`
+	DiscountPercent decimal.Decimal `gorm:"type:decimal(10,2);"`
+	DiscountAmount  decimal.Decimal `gorm:"type:decimal(16,2);"`
+	FinalPriceUnit  decimal.Decimal `gorm:"type:decimal(16,2);"`
+	Subtotal        decimal.Decimal `gorm:"type:decimal(16,2);"`
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+}
+
+func (ci *CartItem) BeforeCreate(tx *gorm.DB) (err error) {
+	if ci.ID == "" {
+		ci.ID = uuid.New().String()
+	}
+	return
 }
