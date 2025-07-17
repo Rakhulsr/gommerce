@@ -21,9 +21,6 @@ func LoadSessionKeysFromEnv() (*SessionKeys, error) {
 	authKeyBase64 := env.AppAuthKey
 	encKeyBase64 := env.AppEncKey
 
-	log.Printf("DEBUG: Raw APP_AUTH_KEY from .env: '%s' (length: %d)", authKeyBase64, len(authKeyBase64))
-	log.Printf("DEBUG: Raw APP_ENC_KEY from .env: '%s' (length: %d)", encKeyBase64, len(encKeyBase64))
-
 	if authKeyBase64 == "" {
 		return nil, fmt.Errorf("APP_AUTH_KEY environment variable not set")
 	}

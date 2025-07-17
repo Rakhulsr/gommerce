@@ -33,7 +33,7 @@ func (r *categoryRepository) Create(ctx context.Context, category *models.Catego
 
 func (r *categoryRepository) GetByID(ctx context.Context, id string) (*models.Category, error) {
 	var category models.Category
-	err := r.db.WithContext(ctx).Preload("Parent").Preload("Section").First(&category, "id = ?", id).Error
+	err := r.db.WithContext(ctx).Preload("Section").First(&category, "id = ?", id).Error
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil, nil
@@ -45,7 +45,7 @@ func (r *categoryRepository) GetByID(ctx context.Context, id string) (*models.Ca
 
 func (r *categoryRepository) GetBySlug(ctx context.Context, slug string) (*models.Category, error) {
 	var category models.Category
-	err := r.db.WithContext(ctx).Preload("Parent").Preload("Section").First(&category, "slug = ?", slug).Error
+	err := r.db.WithContext(ctx).Preload("Section").First(&category, "slug = ?", slug).Error
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil, nil
@@ -57,7 +57,7 @@ func (r *categoryRepository) GetBySlug(ctx context.Context, slug string) (*model
 
 func (r *categoryRepository) GetAll(ctx context.Context) ([]models.Category, error) {
 	var categories []models.Category
-	err := r.db.WithContext(ctx).Preload("Parent").Preload("Section").Find(&categories).Error
+	err := r.db.WithContext(ctx).Preload("Section").Find(&categories).Error
 	if err != nil {
 		return nil, err
 	}
@@ -74,10 +74,10 @@ func (r *categoryRepository) Delete(ctx context.Context, id string) error {
 
 func (r *categoryRepository) GetCategoriesWithProducts(ctx context.Context) ([]models.Category, error) {
 	var categories []models.Category
-	// Memuat Products dari Category, dan ProductImages dari Product
+
 	err := r.db.WithContext(ctx).
-		Preload("Products.ProductImages"). // Memuat ProductImages dari Product
-		Preload("Products").               // Memuat Product (yang memiliki relasi Categories)
+		Preload("Products.ProductImages").
+		Preload("Products").
 		Find(&categories).Error
 	if err != nil {
 		log.Printf("GetCategoriesWithProducts: Failed to get categories with products: %v", err)

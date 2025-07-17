@@ -3,6 +3,7 @@ package other
 import (
 	"net/url"
 
+	"github.com/Rakhulsr/go-ecommerce/app/models"
 	"github.com/Rakhulsr/go-ecommerce/app/utils/breadcrumb"
 )
 
@@ -11,7 +12,9 @@ type UserForTemplate struct {
 	FirstName string
 	LastName  string
 	Email     string
+	Phone     string
 	Role      string
+	Addresses []models.Address
 }
 
 type BasePageData struct {

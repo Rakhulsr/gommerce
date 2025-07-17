@@ -1,187 +1,116 @@
 {{ define "auth/addresses_form" }}
- 
+<style>
+.form-select {
+display: block;
+width: 100%;
+padding: 0.5rem 0.75rem;
+margin-top: 0.25rem;
+font-size: 0.875rem;
+line-height: 1.25rem;
+border-color: #d1d5db;
+border-radius: 0.375rem;
+box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+-webkit-appearance: none;
+-moz-appearance: none;
+appearance: none;
+background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%236b7280' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3e%3cpath d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+background-repeat: no-repeat;
+background-position: right 0.75rem center;
+background-size: 1.5em 1.5em;
+padding-right: 2.5rem;
+}
+.form-select:focus {
+outline: none;
+border-color: #4f46e5;
+box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.5);
+}
+</style>
+<main class="flex-grow container mx-auto px-4 py-8 max-w-2xl">
+<div class="bg-white p-8 rounded-lg shadow-md">
+<h2 class="text-2xl font-bold text-gray-800 mb-6">{{ .Title }}</h2>
 
-<div class="container mx-auto px-4 py-8 max-w-2xl">
-    <h1 class="text-3xl font-bold text-gray-800 mb-6">
-        {{ if .IsEdit }}Edit Alamat{{ else }}Tambah Alamat Baru{{ end }}
-    </h1>
-
-    {{/* Flash Message dari redirect */}}
     {{ if .Message }}
-    <div id="flash-message" class="mb-4 p-4 rounded-lg relative flex items-center justify-between shadow-sm
-        {{ if eq .MessageStatus "success" }} bg-green-50 border border-green-300 text-green-800
-        {{ else if eq .MessageStatus "error" }} bg-red-50 border border-red-300 text-red-800
-        {{ else if eq .MessageStatus "warning" }} bg-yellow-50 border border-yellow-300 text-yellow-800
-        {{ else }} bg-blue-50 border border-blue-300 text-blue-800
-        {{ end }}">
-        <span>{{ .Message }}</span>
-        <button type="button" class="ml-4 text-gray-700 hover:text-gray-900 focus:outline-none" onclick="this.parentElement.remove()">
-            <i class="fas fa-times"></i>
-        </button>
-    </div>
-    {{ end }}
-    
-    {{/* Tampilkan error validasi dari map .Errors */}}
-    {{ if .Errors }}
-    <div class="mb-4 p-4 rounded-lg bg-red-50 border border-red-300 text-red-800 shadow-sm">
-        <p class="font-bold mb-2">Terjadi kesalahan validasi:</p>
-        <ul class="list-disc list-inside">
-            {{ range $field, $msg := .Errors }}
-                <li>{{ $msg }}</li>
-            {{ end }}
-        </ul>
+    <div class="p-4 mb-4 text-sm rounded-lg {{ if eq .MessageStatus "success" }}bg-green-100 text-green-800{{ else if eq .MessageStatus "error" }}bg-red-100 text-red-800{{ else }}bg-blue-100 text-blue-800{{ end }}" role="alert">
+        {{ .Message }}
     </div>
     {{ end }}
 
-    <form action="{{ .FormAction }}" method="POST" class="bg-white rounded-lg shadow-md p-8">
-        {{ if .IsEdit }}
-        <input type="hidden" name="_method" value="PUT">
-        {{ end }}
+    <form action="{{ .FormAction }}" method="POST" class="space-y-6">
+        <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
+        {{/* location_id dihapus karena tidak lagi relevan dengan RajaOngkir ID */}}
 
-        <div class="mb-4">
-            <label for="name" class="block text-gray-700 text-sm font-bold mb-2">Nama Penerima / Alamat:</label>
-            <input type="text" id="name" name="name" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline {{ if .Errors.name }}border-red-500{{ end }}" value="{{ if .AddressData }}{{ .AddressData.Name }}{{ end }}" required>
-            {{ if .Errors.name }}<p class="text-red-500 text-xs italic mt-1">{{ .Errors.name }}</p>{{ end }}
+        <div>
+            <label for="address1" class="block text-sm font-medium text-gray-700">Alamat Lengkap (Jl, No. Rumah, RT/RW)</label>
+            <input type="text" id="address1" name="address1" value="{{ .Address.Address1 }}"
+                class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                required>
+            {{ with .Errors.Address1 }}<p class="mt-1 text-sm text-red-600">{{ . }}</p>{{ end }}
         </div>
 
-        <div class="mb-4">
-            <label for="phone" class="block text-gray-700 text-sm font-bold mb-2">Nomor Telepon:</label>
-            <input type="tel" id="phone" name="phone" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline {{ if .Errors.phone }}border-red-500{{ end }}" value="{{ if .AddressData }}{{ .AddressData.Phone }}{{ end }}" required>
-            {{ if .Errors.phone }}<p class="text-red-500 text-xs italic mt-1">{{ .Errors.phone }}</p>{{ end }}
+        <div>
+            <label for="address2" class="block text-sm font-medium text-gray-700">Detail Lain (Opsional, cth: Blok, Unit, Patokan)</label>
+            <input type="text" id="address2" name="address2" value="{{ .Address.Address2 }}"
+                class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+            {{ with .Errors.Address2 }}<p class="mt-1 text-sm text-red-600">{{ . }}</p>{{ end }}
         </div>
 
-        <div class="mb-4">
-            <label for="email" class="block text-gray-700 text-sm font-bold mb-2">Email:</label>
-            <input type="email" id="email" name="email" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline {{ if .Errors.email }}border-red-500{{ end }}" value="{{ if .AddressData }}{{ .AddressData.Email }}{{ end }}" required>
-            {{ if .Errors.email }}<p class="text-red-500 text-xs italic mt-1">{{ .Errors.email }}</p>{{ end }}
+        <div>
+            <label for="phone" class="block text-sm font-medium text-gray-700">Nomor Telepon</label>
+            <input type="tel" id="phone" name="phone" value="{{ .Address.Phone }}"
+                class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                required>
+            {{ with .Errors.Phone }}<p class="mt-1 text-sm text-red-600">{{ . }}</p>{{ end }}
         </div>
 
-        <div class="mb-4">
-            <label for="address1" class="block text-gray-700 text-sm font-bold mb-2">Alamat Lengkap (Baris 1):</label>
-            <input type="text" id="address1" name="address1" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline {{ if .Errors.address1 }}border-red-500{{ end }}" value="{{ if .AddressData }}{{ .AddressData.Address1 }}{{ end }}" required>
-            {{ if .Errors.address1 }}<p class="text-red-500 text-xs italic mt-1">{{ .Errors.address1 }}</p>{{ end }}
+        <div>
+            <label for="province_input" class="block text-sm font-medium text-gray-700">Provinsi</label>
+            <input type="text" id="province_input" name="province_input" value="{{ .Address.LocationName | extractProvince }}"
+                class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                required placeholder="Contoh: Jawa Barat">
+            {{ with .Errors.Province }}<p class="mt-1 text-sm text-red-600">{{ . }}</p>{{ end }}
         </div>
-
-        <div class="mb-4">
-            <label for="address2" class="block text-gray-700 text-sm font-bold mb-2">Alamat (Baris 2) - Opsional:</label>
-            <input type="text" id="address2" name="address2" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline {{ if .Errors.address2 }}border-red-500{{ end }}" value="{{ if .AddressData }}{{ .AddressData.Address2 }}{{ end }}">
-            {{ if .Errors.address2 }}<p class="text-red-500 text-xs italic mt-1">{{ .Errors.address2 }}</p>{{ end }}
+        <div>
+            <label for="city_input" class="block text-sm font-medium text-gray-700">Kota/Kabupaten</label>
+            <input type="text" id="city_input" name="city_input" value="{{ .Address.LocationName | extractCity }}"
+                class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                required placeholder="Contoh: Depok">
+            {{ with .Errors.City }}<p class="mt-1 text-sm text-red-600">{{ . }}</p>{{ end }}
         </div>
-
-       <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-            <div>
-                <label for="province_id" class="block text-gray-700 text-sm font-bold mb-2">Provinsi:</label>
-                <select id="province_id" name="province_id" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline {{ if .Errors.provinceid }}border-red-500{{ end }}" required>
-                    <option value="">Pilih Provinsi</option>
-                    {{ range .Provinces }}  
-                        <option value="{{ .ID }}" {{ if $.AddressData }}{{ if eq $.AddressData.ProvinceID .ID }}selected{{ end }}{{ end }}>
-                            {{ .Name }}
-                        </option>
-                    {{ end }}
-                </select>
-                {{ if .Errors.provinceid }}<p class="text-red-500 text-xs italic mt-1">{{ .Errors.provinceid }}</p>{{ end }}
-            </div>
-            <div>
-                <label for="city_id" class="block text-gray-700 text-sm font-bold mb-2">Kota:</label>
-                <select id="city_id" name="city_id" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline {{ if .Errors.cityid }}border-red-500{{ end }}" required>
-                    <option value="">Pilih Kota</option>
-                    {{ if .AddressData }}
-                        {{ if .AddressData.ProvinceID }}
-                            {{/* Jika ada data form, tampilkan kota yang sudah dipilih */}}
-                            <option value="{{ .AddressData.CityID }}" selected>{{ .AddressData.CityName }}</option>
-                        {{ end }}
-                    {{ else }}
-                        {{/* Default jika tidak ada data form */}}
-                        <option value="" selected>Pilih Kota</option>
-                    {{ end }}
-                </select>
-                {{ if .Errors.cityid }}<p class="text-red-500 text-xs italic mt-1">{{ .Errors.cityid }}</p>{{ end }}
-            </div>
+        <div>
+            <label for="district_input" class="block text-sm font-medium text-gray-700">Kecamatan</label>
+            <input type="text" id="district_input" name="district_input" value="{{ .Address.LocationName | extractDistrict }}"
+                class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                required placeholder="Contoh: Sukmajaya">
+            {{ with .Errors.District }}<p class="mt-1 text-sm text-red-600">{{ . }}</p>{{ end }}
         </div>
-
-        <div class="mb-6">
-            <label for="post_code" class="block text-gray-700 text-sm font-bold mb-2">Kode Pos:</label>
-            <input type="text" id="post_code" name="post_code" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline {{ if .Errors.postcode }}border-red-500{{ end }}" value="{{ if .AddressData }}{{ .AddressData.PostCode }}{{ end }}" required>
-            {{ if .Errors.postcode }}<p class="text-red-500 text-xs italic mt-1">{{ .Errors.postcode }}</p>{{ end }}
+        <div>
+            <label for="subdistrict_input" class="block text-sm font-medium text-gray-700">Kelurahan/Desa</label>
+            <input type="text" id="subdistrict_input" name="subdistrict_input" value="{{ .Address.LocationName | extractSubdistrict }}"
+                class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                required placeholder="Contoh: Mekar Jaya">
+            {{ with .Errors.Subdistrict }}<p class="mt-1 text-sm text-red-600">{{ . }}</p>{{ end }}
+        </div>
+        <div>
+            <label for="zip_code_input" class="block text-sm font-medium text-gray-700">Kode Pos</label>
+            <input type="text" id="zip_code_input" name="post_code" value="{{ .Address.PostCode }}"
+                class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                required placeholder="Contoh: 12345">
+            {{ with .Errors.PostCode }}<p class="mt-1 text-sm text-red-600">{{ . }}</p>{{ end }}
         </div>
 
 
-        <div class="flex items-center justify-between">
-            <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-300 focus:outline-none focus:shadow-outline">
-                {{ if .IsEdit }}Perbarui Alamat{{ else }}Simpan Alamat{{ end }}
-            </button>
-            <a href="/addresses" class="inline-block align-baseline font-bold text-sm text-gray-600 hover:text-gray-800">
+        <div class="flex justify-end space-x-3">
+            <a href="/addresses" class="inline-flex justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
                 Batal
             </a>
+            <button type="submit" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500">
+                Simpan Alamat
+            </button>
         </div>
     </form>
 </div>
 
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    const provinceSelect = document.getElementById('province_id');
-    const citySelect = document.getElementById('city_id');
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
-    
-    const loadCities = (provinceId, selectedCityId = null) => {
-        citySelect.innerHTML = '<option value="">Memuat kota...</option>'; 
-        citySelect.disabled = true;
-
-        if (provinceId) {
-            fetch(`/cities?province_id=${provinceId}`)
-                .then(response => {
-                    if (!response.ok) {
-                        console.error('HTTP Error:', response.status, response.statusText);
-                        return response.json().then(err => { throw new Error(err.error || 'Server error'); });
-                    }
-                    return response.json();
-                })
-                .then(data => {
-                    if (data && data.cities) {
-                        citySelect.innerHTML = '<option value="">Pilih Kota</option>';
-                        data.cities.forEach(city => {
-                            const option = document.createElement('option');
-                            option.value = city.city_id;   
-                            option.textContent = city.city_name; 
-                            if (selectedCityId && String(city.city_id) === String(selectedCityId)) {
-                                option.selected = true;
-                            }
-                            citySelect.appendChild(option);
-                        });
-                    } else {
-                        console.error('Format data kota tidak sesuai atau kosong:', data);
-                        citySelect.innerHTML = '<option value="">Gagal memuat kota</option>';
-                    }
-                    citySelect.disabled = false;
-                })
-                .catch(error => {
-                    console.error('Ada masalah dengan operasi fetch:', error);
-                    citySelect.innerHTML = '<option value="">Gagal memuat kota</option>';
-                    citySelect.disabled = false;
-                });
-        } else {
-            citySelect.innerHTML = '<option value="">Pilih Provinsi Dahulu</option>';
-            citySelect.disabled = false;
-        }
-    };
-
-    
-    if (provinceSelect) {
-        provinceSelect.addEventListener('change', function() {
-            loadCities(this.value);
-        });
-    }
-
-    
-    const initialProvinceId = provinceSelect ? provinceSelect.value : '';
-    const initialCityId = "{{ if .AddressData }}{{ .AddressData.CityID }}{{ end }}"; 
-
-    if (initialProvinceId) {
-        loadCities(initialProvinceId, initialCityId);
-    } else {
-        citySelect.innerHTML = '<option value="">Pilih Provinsi Dahulu</option>';
-        citySelect.disabled = true;
-    }
-});
-</script>
+</main>
 {{ end }}

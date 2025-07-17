@@ -4,9 +4,11 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 	"time"
@@ -14,7 +16,9 @@ import (
 	"github.com/Rakhulsr/go-ecommerce/app/models"
 	"github.com/Rakhulsr/go-ecommerce/app/models/other"
 	"github.com/Rakhulsr/go-ecommerce/app/utils/breadcrumb"
+	"github.com/Rakhulsr/go-ecommerce/app/utils/sessions"
 	"github.com/go-playground/validator/v10"
+	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -23,14 +27,39 @@ type contextKey string
 const (
 	ContextKeyUserID     contextKey = "userID"
 	ContextKeyCartID     contextKey = "cartID"
-	ContextKeyUser       contextKey = "userObject"
-	CartCountKey         contextKey = "cart_count"
+	ContextKeyUser       contextKey = "user"
+	CartCountKey         contextKey = "cartCount"
 	RememberMeCookieName            = "remember_token"
 	CSRFTokenKey         contextKey = "csrfToken"
+	ContextKeyIsLoggedIn contextKey = "isLoggedIn"
+	ContextKeyUserRole   contextKey = "userRole"
 )
 
+func ClearCartIDFromSession(w http.ResponseWriter, r *http.Request, sessionStore sessions.SessionStore) {
+	session, err := sessionStore.GetSession(w, r) // Memanggil metode GetSession dari instance SessionStore
+	if err != nil {
+		log.Printf("Error getting session to clear cart ID: %v", err)
+		return
+	}
+	// Hapus nilai cartID dari sesi
+	delete(session.Values, string(ContextKeyCartID))
+	// Atur MaxAge ke -1 untuk menghapus cookie sesi secara efektif
+	session.Options.MaxAge = -1
+	err = session.Save(r, w)
+	if err != nil {
+		log.Printf("Error saving session after clearing cart ID: %v", err)
+	}
+	log.Println("CartID cleared from session.")
+}
 func FormatRupiah(amount float64) string {
 	return fmt.Sprintf("Rp %.0f", amount)
+}
+
+func GetCartIDFromContext(r *http.Request) string {
+	if cartID, ok := r.Context().Value(ContextKeyCartID).(string); ok {
+		return cartID
+	}
+	return ""
 }
 
 func GetBaseData(r *http.Request, pageSpecificData map[string]interface{}) map[string]interface{} {
@@ -90,7 +119,9 @@ func GetBaseData(r *http.Request, pageSpecificData map[string]interface{}) map[s
 				FirstName: user.FirstName,
 				LastName:  user.LastName,
 				Email:     user.Email,
+				Phone:     user.Phone,
 				Role:      user.Role,
+				Addresses: user.Address,
 			}
 			pageSpecificData["User"] = userForTemplate
 			pageSpecificData["IsLoggedIn"] = true
@@ -106,6 +137,11 @@ func GetBaseData(r *http.Request, pageSpecificData map[string]interface{}) map[s
 			pageSpecificData["UserID"] = ""
 			pageSpecificData["IsAdminPage"] = false
 		}
+	} else {
+		pageSpecificData["User"] = nil
+		pageSpecificData["IsLoggedIn"] = false
+		pageSpecificData["UserID"] = ""
+		pageSpecificData["IsAdminPage"] = false
 	}
 
 	if status := r.URL.Query().Get("status"); status != "" {
@@ -142,20 +178,6 @@ func FormatValidationErrors(errs validator.ValidationErrors) map[string]string {
 		}
 	}
 	return errorMessages
-}
-
-func capitalizeFirstLetter(s string) string {
-	if len(s) == 0 {
-		return ""
-	}
-	s = strings.ReplaceAll(s, "_", " ")
-	words := strings.Fields(s)
-	for i, word := range words {
-		if len(word) > 0 {
-			words[i] = strings.ToUpper(word[:1]) + strings.ToLower(word[1:])
-		}
-	}
-	return strings.Join(words, " ")
 }
 
 func SetCookie(w http.ResponseWriter, name, value string, expires time.Duration) {
@@ -243,4 +265,66 @@ func GenerateSlug(s string) string {
 	s = reg.ReplaceAllString(s, "-")
 	s = strings.Trim(s, "-")
 	return s
+}
+
+func SplitRememberToken(token string) (selector string, verifier string, err error) {
+	parts := strings.Split(token, ".")
+	if len(parts) != 2 {
+		return "", "", fmt.Errorf("invalid remember token format")
+	}
+	return parts[0], parts[1], nil
+}
+
+func DecodeJSONBody(w http.ResponseWriter, r *http.Request, dst interface{}) error {
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	return decoder.Decode(dst)
+}
+
+func GenerateOrderCode() string {
+
+	return fmt.Sprintf("INV-%s-%s", time.Now().Format("20060102"), uuid.New().String()[:8])
+}
+
+func GetQuery(r *http.Request) url.Values {
+	return r.URL.Query()
+}
+
+func PopulateBaseData(pageData *other.BasePageData, baseDataMap map[string]interface{}) {
+	if title, ok := baseDataMap["Title"].(string); ok {
+		pageData.Title = title
+	}
+	if isLoggedIn, ok := baseDataMap["IsLoggedIn"].(bool); ok {
+		pageData.IsLoggedIn = isLoggedIn
+	}
+	if user, ok := baseDataMap["User"].(*other.UserForTemplate); ok {
+		pageData.User = user
+	}
+	if userID, ok := baseDataMap["UserID"].(string); ok {
+		pageData.UserID = userID
+	}
+	if cartCount, ok := baseDataMap["CartCount"].(int); ok {
+		pageData.CartCount = cartCount
+	}
+	if csrfToken, ok := baseDataMap["CSRFToken"].(string); ok {
+		pageData.CSRFToken = csrfToken
+	}
+	if message, ok := baseDataMap["Message"].(string); ok {
+		pageData.Message = message
+	}
+	if messageStatus, ok := baseDataMap["MessageStatus"].(string); ok {
+		pageData.MessageStatus = messageStatus
+	}
+	if query, ok := baseDataMap["Query"].(url.Values); ok {
+		pageData.Query = query
+	}
+	if breadcrumbs, ok := baseDataMap["Breadcrumbs"].([]breadcrumb.Breadcrumb); ok {
+		pageData.Breadcrumbs = breadcrumbs
+	}
+	if isAuthPage, ok := baseDataMap["IsAuthPage"].(bool); ok {
+		pageData.IsAuthPage = isAuthPage
+	}
+	if isAdminPage, ok := baseDataMap["IsAdminPage"].(bool); ok {
+		pageData.IsAdminPage = isAdminPage
+	}
 }

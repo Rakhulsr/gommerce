@@ -1,6 +1,7 @@
 package sessions
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"time"
@@ -9,8 +10,6 @@ import (
 )
 
 const (
-	sessionStoreKey = "ecommerce-session-key"
-
 	sessionCookieName = "ecommerce-session"
 
 	userIDSessionKey = "userID"
@@ -18,15 +17,16 @@ const (
 )
 
 type SessionStore interface {
-	GetUserID(r *http.Request) string
+	GetUserID(w http.ResponseWriter, r *http.Request) string
 	SetUserID(w http.ResponseWriter, r *http.Request, userID string) error
 	ClearUserID(w http.ResponseWriter, r *http.Request) error
 
-	GetCartID(r *http.Request) string
+	GetCartID(w http.ResponseWriter, r *http.Request) string
 	SetCartID(w http.ResponseWriter, r *http.Request, cartID string) error
 	ClearCartID(w http.ResponseWriter, r *http.Request) error
 
 	ClearSession(w http.ResponseWriter, r *http.Request) error
+	GetSession(w http.ResponseWriter, r *http.Request) (*sessions.Session, error)
 }
 
 type CookieSessionStore struct {
@@ -46,7 +46,7 @@ func NewCookieSessionStore(keyPairs ...[]byte) *CookieSessionStore {
 	return &CookieSessionStore{store: store}
 }
 
-func (c *CookieSessionStore) getSession(w http.ResponseWriter, r *http.Request) (*sessions.Session, error) {
+func (c *CookieSessionStore) GetSession(w http.ResponseWriter, r *http.Request) (*sessions.Session, error) {
 	session, err := c.store.Get(r, sessionCookieName)
 	if err != nil {
 
@@ -55,29 +55,31 @@ func (c *CookieSessionStore) getSession(w http.ResponseWriter, r *http.Request) 
 	return session, nil
 }
 
-func (c *CookieSessionStore) GetUserID(r *http.Request) string {
-	session, err := c.getSession(nil, r)
-	if err != nil || session == nil {
+func (s *CookieSessionStore) GetUserID(w http.ResponseWriter, r *http.Request) string {
+	session, err := s.store.Get(r, "auth-session")
+	if err != nil {
+		log.Printf("SessionStore: Error getting session for UserID: %v", err)
 		return ""
 	}
-	userID, ok := session.Values[userIDSessionKey].(string)
+	userID, ok := session.Values["user_id"].(string)
 	if !ok {
 		return ""
 	}
 	return userID
 }
 
-func (c *CookieSessionStore) SetUserID(w http.ResponseWriter, r *http.Request, userID string) error {
-	session, err := c.getSession(w, r)
-	if err != nil || session == nil {
-		return err
+func (s *CookieSessionStore) SetUserID(w http.ResponseWriter, r *http.Request, userID string) error {
+	session, err := s.store.Get(r, "auth-session")
+	if err != nil {
+		return fmt.Errorf("failed to get session: %w", err)
 	}
-	session.Values[userIDSessionKey] = userID
+	session.Values["user_id"] = userID
+	session.Values["is_logged_in"] = true
 	return session.Save(r, w)
 }
 
 func (c *CookieSessionStore) ClearUserID(w http.ResponseWriter, r *http.Request) error {
-	session, err := c.getSession(w, r)
+	session, err := c.GetSession(w, r)
 	if err != nil || session == nil {
 		return err
 	}
@@ -85,42 +87,55 @@ func (c *CookieSessionStore) ClearUserID(w http.ResponseWriter, r *http.Request)
 	return session.Save(r, w)
 }
 
-func (c *CookieSessionStore) GetCartID(r *http.Request) string {
-	session, err := c.getSession(nil, r)
-	if err != nil || session == nil {
+func (s *CookieSessionStore) GetCartID(w http.ResponseWriter, r *http.Request) string {
+	session, err := s.store.Get(r, "auth-session")
+	if err != nil {
+		log.Printf("SessionStore: Error getting session for CartID: %v", err)
 		return ""
 	}
-	cartID, ok := session.Values[cartIDSessionKey].(string)
+	cartID, ok := session.Values["cart_id"].(string)
 	if !ok {
 		return ""
 	}
 	return cartID
 }
 
-func (c *CookieSessionStore) SetCartID(w http.ResponseWriter, r *http.Request, cartID string) error {
-	session, err := c.getSession(w, r)
-	if err != nil || session == nil {
-		return err
+func (s *CookieSessionStore) SetCartID(w http.ResponseWriter, r *http.Request, cartID string) error {
+	session, err := s.store.Get(r, "auth-session")
+	if err != nil {
+		return fmt.Errorf("failed to get session: %w", err)
 	}
-	session.Values[cartIDSessionKey] = cartID
+	session.Values["cart_id"] = cartID
 	return session.Save(r, w)
 }
 
-func (c *CookieSessionStore) ClearCartID(w http.ResponseWriter, r *http.Request) error {
-	session, err := c.getSession(w, r)
-	if err != nil || session == nil {
-		return err
+func (s *CookieSessionStore) ClearCartID(w http.ResponseWriter, r *http.Request) error {
+	session, err := s.store.Get(r, "auth-session")
+	if err != nil {
+		log.Printf("SessionStore: Error getting session to clear cart ID: %v", err)
+		return fmt.Errorf("failed to get session to clear cart ID: %w", err)
 	}
-	delete(session.Values, cartIDSessionKey)
-	return session.Save(r, w)
+	session.Values["cart_id"] = ""
+	if err := session.Save(r, w); err != nil {
+		log.Printf("SessionStore: Error saving session after clearing cart ID: %v", err)
+		return fmt.Errorf("failed to save session after clearing cart ID: %w", err)
+	}
+	return nil
 }
 
-func (c *CookieSessionStore) ClearSession(w http.ResponseWriter, r *http.Request) error {
-	session, err := c.getSession(w, r)
-	if err != nil || session == nil {
+func (s *CookieSessionStore) ClearSession(w http.ResponseWriter, r *http.Request) error {
+	session, err := s.store.Get(r, "auth-session")
+	if err != nil {
+		log.Printf("SessionStore: Error getting session to clear: %v", err)
 		return err
 	}
-	session.Values = make(map[interface{}]interface{})
+	session.Values["user_id"] = ""
+	session.Values["is_logged_in"] = false
+	session.Values["cart_id"] = ""
 	session.Options.MaxAge = -1
-	return session.Save(r, w)
+	if err := session.Save(r, w); err != nil {
+		log.Printf("SessionStore: Error saving session after clearing: %v", err)
+	}
+
+	return nil
 }

@@ -32,10 +32,12 @@
                 <table class="min-w-full divide-y divide-gray-200">
                     <thead class="bg-blue-100">
                         <tr>
-                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">ID</th>
+                            <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">ID</th> <!-- Changed px-6 to px-4 -->
                             <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Nama Produk</th>
                             <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">SKU</th>
                             <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Harga</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Diskon (%)</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Diskon (Jumlah)</th>
                             <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Stok</th>
                             <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Kategori</th>
                             <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Tanggal Dibuat</th>
@@ -46,10 +48,12 @@
                         {{ if .Products }}
                             {{ range .Products }}
                             <tr>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ .ID }}</td>
+                                <td class="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ .ID }}</td> <!-- Changed px-6 to px-4 -->
                                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{{ .Name }}</td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{{ .Sku }}</td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{{ rupiah .Price }}</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{{ .DiscountPercent }}%</td> <!-- Added StringFixed(2) -->
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{{ rupiah .DiscountAmount }}</td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{{ .Stock }}</td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
                                     {{ if .Categories }}
@@ -60,11 +64,10 @@
                                         Tidak Ada
                                     {{ end }}
                                 </td>
-
                                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{{ .CreatedAt.Format "02 Jan 2006" }}</td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
                                     <a href="/admin/products/edit/{{ .ID }}" class="text-indigo-600 hover:text-indigo-900 mr-3">Edit</a>
-                                    <form action="/admin/products/delete/{{ .ID }}" method="POST" class="inline-block delete-cart-item-form">
+                                    <form action="/admin/products/delete/{{ .ID }}" method="POST" class="inline-block delete-product-form">
                                         <input type="hidden" name="_method" value="DELETE">
                                         <button type="submit" class="text-red-600 hover:text-red-900">Hapus</button>
                                     </form>
@@ -73,7 +76,7 @@
                             {{ end }}
                         {{ else }}
                             <tr>
-                                <td colspan="8" class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">Tidak ada produk ditemukan.</td>
+                                <td colspan="10" class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">Tidak ada produk ditemukan.</td>
                             </tr>
                         {{ end }}
                     </tbody>
@@ -83,20 +86,33 @@
     </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
-    document.addEventListener('DOMContentLoaded', function() { 
-        document.querySelectorAll('.delete-cart-item-form').forEach(form => {
+    document.addEventListener('DOMContentLoaded', function() {
+        // Flash message dismissal
+        const flashMessage = document.getElementById('flash-message');
+        if (flashMessage) {
+            setTimeout(() => {
+                flashMessage.classList.add('animate-fade-out');
+                flashMessage.addEventListener('animationend', () => {
+                    flashMessage.remove();
+                });
+            }, 5000);
+        }
+
+        // SweetAlert for delete confirmation (for products)
+        document.querySelectorAll('.delete-product-form').forEach(form => {
             form.addEventListener('submit', function(e) {
                 e.preventDefault();
                 const formElement = this; 
 
                 Swal.fire({
                     title: 'Apakah Anda yakin?',
-                    text: 'Item ini akan dihapus dari keranjang!',
+                    text: 'Produk ini akan dihapus secara permanen!',
                     icon: 'warning',
                     showCancelButton: true,
-                    confirmButtonColor: '#3085d6',
-                    cancelButtonColor: '#d33',
+                    confirmButtonColor: '#d33',
+                    cancelButtonColor: '#3085d6',
                     confirmButtonText: 'Ya, hapus!',
                     cancelButtonText: 'Batal'
                 }).then((result) => {

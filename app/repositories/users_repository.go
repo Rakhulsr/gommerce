@@ -2,6 +2,7 @@ package repositories
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -20,11 +21,14 @@ type UserRepositoryImpl interface {
 	Update(ctx context.Context, user *models.User) error
 	UpdateRememberToken(ctx context.Context, userID string, selector string, verifierRaw string) error
 	FindByRememberToken(ctx context.Context, tokenFromCookie string) (*models.User, error)
+	FindByPhone(ctx context.Context, phone string) (*models.User, error)
+	GetUserByIDWithAddresses(ctx context.Context, id string) (*models.User, error)
 
 	SavePasswordResetToken(ctx context.Context, userID string, token *string, expiresAt *time.Time) error
 	FindByPasswordResetToken(ctx context.Context, token string) (*models.User, error)
 	ClearPasswordResetToken(ctx context.Context, userID string) error
 	UpdatePassword(ctx context.Context, userID string, newPasswordHash string) error
+	FindBySelector(ctx context.Context, selector string) (*models.User, error)
 
 	GetAllUsers(ctx context.Context) ([]models.User, error)
 	UpdateUser(ctx context.Context, user *models.User) error
@@ -79,6 +83,19 @@ func (r *userRepository) FindByID(ctx context.Context, id string) (*models.User,
 func (r *userRepository) FindByEmail(ctx context.Context, email string) (*models.User, error) {
 	var user models.User
 	err := r.db.WithContext(ctx).Where("email = ?", email).First(&user).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &user, nil
+}
+
+func (r *userRepository) FindByPhone(ctx context.Context, phone string) (*models.User, error) {
+	var user models.User
+
+	err := r.db.WithContext(ctx).Where("phone = ?", phone).First(&user).Error
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil, nil
@@ -200,10 +217,26 @@ func (r *userRepository) GetAllUsers(ctx context.Context) ([]models.User, error)
 
 func (r *userRepository) UpdateUser(ctx context.Context, user *models.User) error {
 	user.UpdatedAt = time.Now()
-	if err := r.db.WithContext(ctx).Save(user).Error; err != nil {
+
+	updates := map[string]interface{}{
+		"first_name": user.FirstName,
+		"last_name":  user.LastName,
+		"email":      user.Email,
+		"phone":      user.Phone,
+		"updated_at": user.UpdatedAt,
+	}
+	if user.Password != "" {
+		updates["password"] = user.Password
+	}
+
+	if err := r.db.WithContext(ctx).
+		Model(&models.User{}).
+		Where("id = ?", user.ID).
+		Updates(updates).Error; err != nil {
 		log.Printf("UserRepository.UpdateUser: Error updating user %s: %v", user.ID, err)
 		return fmt.Errorf("failed to update user: %w", err)
 	}
+
 	log.Printf("UserRepository.UpdateUser: User %s updated successfully.", user.ID)
 	return nil
 }
@@ -215,4 +248,31 @@ func (r *userRepository) DeleteUser(ctx context.Context, id string) error {
 	}
 	log.Printf("UserRepository.DeleteUser: User %s deleted successfully.", id)
 	return nil
+}
+
+func (r *userRepository) FindBySelector(ctx context.Context, selector string) (*models.User, error) {
+	var user models.User
+	err := r.db.WithContext(ctx).
+		Where("remember_token_selector = ?", selector).
+		First(&user).Error
+
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil // User tidak ditemukan, bukan error fatal
+		}
+		return nil, err
+	}
+	return &user, nil
+}
+
+func (r *userRepository) GetUserByIDWithAddresses(ctx context.Context, id string) (*models.User, error) {
+	var user models.User
+	err := r.db.WithContext(ctx).Preload("Address").First(&user, "id = ?", id).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &user, nil
 }

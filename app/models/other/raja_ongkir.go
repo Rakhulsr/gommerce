@@ -1,9 +1,15 @@
 package other
 
 type ProvinceResponse struct {
-	ProvinceData ProvinceData `json:"rajaongkir"`
+	RajaOngkir struct {
+		Query  interface{} `json:"query"`
+		Status struct {
+			Code        int    `json:"code"`
+			Description string `json:"description"`
+		} `json:"status"`
+		Results []Province `json:"results"`
+	} `json:"rajaongkir"`
 }
-
 type ProvinceData struct {
 	Results []Province `json:"results"`
 }
@@ -13,9 +19,16 @@ type Province struct {
 	Name string `json:"province"`
 }
 
-type CityData struct {
+type SingleProvinceResponse struct {
+	RajaOngkir struct {
+		Query  interface{} `json:"query"`
+		Status struct {
+			Code        int    `json:"code"`
+			Description string `json:"description"`
+		} `json:"status"`
+		Results Province `json:"results"` // KOREKSI: Ini adalah objek Province tunggal
+	} `json:"rajaongkir"`
 }
-
 type City struct {
 	ID         string `json:"city_id"`
 	ProvinceID string `json:"province_id"`
@@ -33,6 +46,17 @@ type CityResponse struct {
 			Description string `json:"description"`
 		} `json:"status"`
 		Results []City `json:"results"`
+	} `json:"rajaongkir"`
+}
+
+type SingleCityResponse struct {
+	RajaOngkir struct {
+		Query  interface{} `json:"query"`
+		Status struct {
+			Code        int    `json:"code"`
+			Description string `json:"description"`
+		} `json:"status"`
+		Results City `json:"results"` // KOREKSI: Ini adalah objek City tunggal
 	} `json:"rajaongkir"`
 }
 

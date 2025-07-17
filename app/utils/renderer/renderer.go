@@ -4,6 +4,7 @@ import (
 	"html/template"
 	"log"
 
+	"github.com/Rakhulsr/go-ecommerce/app/helpers"
 	"github.com/leekchan/accounting"
 	"github.com/shopspring/decimal"
 	"github.com/unrolled/render"
@@ -11,10 +12,10 @@ import (
 
 func New() *render.Render {
 	r := render.New(render.Options{
-
 		Directory:  "templates",
 		Layout:     "layout",
 		Extensions: []string{".html"},
+		Delims:     render.Delims{"{{", "}}"},
 		Funcs: []template.FuncMap{
 			{
 				"until": func(count int) []int {
@@ -49,10 +50,11 @@ func New() *render.Render {
 					return ac.FormatMoney(f)
 				},
 			},
+			helpers.FuncMap,
 		},
 	})
 
-	log.Println("Renderer initialized. Templates will be loaded from 'assets/views' and its subdirectories.")
+	log.Println("✅ Renderer initialized. Templates will be loaded from 'assets/views' and its subdirectories.")
 
 	return r
 }

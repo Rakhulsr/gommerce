@@ -122,10 +122,10 @@
     
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="/js/index.js"></script>
-    <script src="/js/cartBadge.js"></script>
+    <!-- <script src="/js/cartBadge.js"></script> -->
     <script src="/js/addCart.js"></script>
     <script src="/js/flashMsg.js"></script>
-    <script src="/js/shipping.js"></script>
+    <!-- <script src="/js/shipping.js"></script> -->
 
     <script>
         window.addEventListener('load', () => {
@@ -133,6 +133,81 @@
             if (preloader) {
                 preloader.classList.add('hidden');
             }
+        });
+    </script>
+
+
+<script>
+
+      async function updateCartBadge() {
+            try {
+                const response = await fetch('/cart-count');
+                if (!response.ok) {
+                    throw new Error('Failed to fetch cart count');
+                }
+                const count = await response.text(); // Get raw text as it's just a number
+                const cartBadge = document.getElementById('cart-badge');
+                if (cartBadge) {
+                    cartBadge.textContent = count;
+                    // Optionally hide/show badge if count is 0
+                    if (parseInt(count) === 0) {
+                        cartBadge.classList.add('hidden');
+                    } else {
+                        cartBadge.classList.remove('hidden');
+                    }
+                }
+            } catch (error) {
+                console.error('Error updating cart badge:', error);
+                // Fallback: set to 0 or hide if error occurs
+                const cartBadge = document.getElementById('cart-badge');
+                if (cartBadge) {
+                    cartBadge.textContent = '0';
+                    cartBadge.classList.add('hidden');
+                }
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initial load of cart badge
+            updateCartBadge();
+
+            // Intercept form submissions for cart operations to update badge
+            // This assumes all cart operations (add, update, delete) redirect back
+            // to a page that reloads the cart badge. For AJAX operations,
+            // you'd call updateCartBadge() directly after a successful response.
+            document.querySelectorAll('form[action^="/carts"]').forEach(form => {
+                form.addEventListener('submit', function(event) {
+                    // This is a basic example. For a more robust solution,
+                    // you might want to use AJAX for cart operations and
+                    // call updateCartBadge() in the .then() block of your fetch/axios call.
+                    // For now, since your handlers redirect, the page reload will trigger updateCartBadge.
+                    // However, if you want to update *before* redirect (e.g., for visual feedback),
+                    // you'd need to preventDefault() and handle the form submission via fetch.
+                    // For now, we rely on the page reload after redirect.
+                });
+            });
+
+            // If you have AJAX calls for cart operations, call updateCartBadge() after success.
+            // Example for an AJAX add to cart (conceptual, not in your current HTML):
+            /*
+            async function handleAddToCartAjax(productId, qty) {
+                try {
+                    const response = await fetch('/carts/add', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: `product_id=${productId}&qty=${qty}`
+                    });
+                    if (response.ok) {
+                        await updateCartBadge(); // Update badge on success
+                        // Show success message
+                    } else {
+                        // Handle error
+                    }
+                } catch (error) {
+                    console.error('AJAX Add to Cart Error:', error);
+                }
+            }
+            */
         });
     </script>
   </body>

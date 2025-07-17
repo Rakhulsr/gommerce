@@ -8,9 +8,9 @@ import (
 
 type CartItem struct {
 	ID         string `gorm:"size:36;not null;uniqueIndex;primary_key"`
-	Cart       Cart
+	Cart       *Cart
 	CartID     string `gorm:"size:36;index"`
-	Product    Product
+	Product    *Product
 	ProductID  string `gorm:"size:36;index"`
 	Qty        int
 	BasePrice  decimal.Decimal `gorm:"type:decimal(16,2);"`
@@ -19,6 +19,7 @@ type CartItem struct {
 	TaxPercent decimal.Decimal `gorm:"type:decimal(10,2);"`
 	GrandTotal decimal.Decimal `gorm:"type:decimal(16,2);"`
 	SubTotal   decimal.Decimal `gorm:"type:decimal(16,2);"`
+	TotalPrice decimal.Decimal `gorm:"type:decimal(16,2);"`
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
 }

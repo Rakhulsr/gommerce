@@ -1,0 +1,143 @@
+{{ define "order_confirmation" }}
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ .Title }} - Toko Bulan</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome untuk ikon -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <!-- SweetAlert2 CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6; /* Warna abu-abu terang */
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 8px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+
+        /* --- CSS Keyframes --- */
+        @keyframes bounceIn {
+            0% { transform: scale(0.1); opacity: 0; }
+            60% { transform: scale(1.2); opacity: 1; }
+            100% { transform: scale(1); }
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            20%, 60% { transform: translateX(-10px); }
+            40%, 80% { transform: translateX(10px); }
+        }
+        /* --- End CSS Keyframes --- */
+    </style>
+</head>
+<body class="min-h-screen flex flex-col">
+    <!-- Header (jika ada, Anda bisa menyertakan partial header di sini) -->
+    <!-- Contoh sederhana header, sesuaikan dengan layout Anda -->
+    <header class="bg-white shadow-sm py-4">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center">
+            <a href="/" class="text-2xl font-bold text-gray-900">Toko Bulan</a>
+            <nav>
+                <ul class="flex space-x-4">
+                    <li><a href="/products" class="text-gray-600 hover:text-gray-900">Produk</a></li>
+                    <li><a href="/carts" class="text-gray-600 hover:text-gray-900">Keranjang</a></li>
+                    {{ if .IsLoggedIn }}
+                        <li><a href="/profile" class="text-gray-600 hover:text-gray-900">Profil</a></li>
+                        <li><a href="/orders" class="text-gray-600 hover:text-gray-900">Pesanan Saya</a></li>
+                        <form action="/logout" method="POST" class="inline">
+                            <button type="submit" class="text-red-600 hover:text-red-800">Logout</button>
+                        </form>
+                    {{ else }}
+                        <li><a href="/login" class="text-gray-600 hover:text-gray-900">Login</a></li>
+                        <li><a href="/register" class="text-gray-600 hover:text-gray-900">Daftar</a></li>
+                    {{ end }}
+                </ul>
+            </nav>
+        </div>
+    </header>
+
+    <main class="flex-grow container mx-auto px-4 py-8">
+        <div class="max-w-3xl mx-auto bg-white rounded-lg shadow-xl p-8 border border-gray-100">
+            <div class="text-center mb-8">
+                {{ if .IsSuccess }}
+                    <i class="fas fa-check-circle text-emerald-500 text-6xl mb-4 animate-bounce-in"></i>
+                    <h1 class="text-4xl font-extrabold text-gray-900 mb-2">Pembayaran Berhasil!</h1>
+                {{ else }}
+                    <i class="fas fa-times-circle text-red-500 text-6xl mb-4 animate-shake"></i>
+                    <h1 class="text-4xl font-extrabold text-gray-900 mb-2">Pembayaran Gagal/Tertunda</h1>
+                {{ end }}
+                <p class="text-gray-700 text-lg">{{ .Message }}</p>
+            </div>
+
+            <div class="border-t border-b border-gray-200 py-6 mb-8">
+                <h2 class="text-2xl font-bold text-gray-800 mb-4">Detail Pesanan</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-gray-700">
+                    <div>
+                        <p class="font-semibold">Kode Pesanan:</p>
+                        <p class="text-lg font-mono text-blue-600">{{ .Order.OrderCode }}</p>
+                    </div>
+                    <div>
+                        <p class="font-semibold">Total Pembayaran:</p>
+                        <p class="text-lg font-bold text-emerald-700">{{ rupiah .Order.GrandTotal }}</p>
+                    </div>
+                    <div>
+                        <p class="font-semibold">Status Pembayaran:</p>
+                        <p class="text-lg capitalize">{{ .Order.PaymentStatus }}</p>
+                    </div>
+                    <div>
+                        <p class="font-semibold">Status Pesanan:</p>
+                        <p class="text-lg capitalize">{{ .OrderStatusText }}</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="text-center">
+                <a href="/orders/{{ .Order.ID }}" class="inline-block bg-blue-600 text-white py-3 px-6 rounded-lg hover:bg-blue-700 text-lg font-semibold shadow-md transition duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 mr-4">
+                    Lihat Detail Pesanan
+                </a>
+                <a href="/" class="inline-block bg-gray-200 text-gray-800 py-3 px-6 rounded-lg hover:bg-gray-300 text-lg font-semibold shadow-md transition duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2">
+                    Kembali ke Beranda
+                </a>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer (jika ada, Anda bisa menyertakan partial footer di sini) -->
+    <footer class="bg-gray-800 text-white py-6 mt-auto">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+            <p>&copy; 2025 Toko Bulan. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <!-- SweetAlert2 JS -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const checkIcon = document.querySelector('.fa-check-circle');
+            if (checkIcon) {
+                checkIcon.style.animation = 'bounceIn 0.8s ease-out forwards';
+            }
+            const timesIcon = document.querySelector('.fa-times-circle');
+            if (timesIcon) {
+                timesIcon.style.animation = 'shake 0.5s ease-out forwards';
+            }
+        });
+    </script>
+</body>
+</html>
+{{ end }}

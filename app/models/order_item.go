@@ -4,25 +4,26 @@ import (
 	"time"
 
 	"github.com/shopspring/decimal"
+	"gorm.io/gorm"
 )
 
 type OrderItem struct {
-	ID              string `gorm:"size:36;not null;uniqueIndex;primary_key"`
-	Order           Order
-	OrderID         string `gorm:"size:36;index"`
-	Product         Product
-	ProductID       string `gorm:"size:36;index"`
-	Qty             int
-	BasePrice       decimal.Decimal `gorm:"type:decimal(16,2)"`
-	BaseTotal       decimal.Decimal `gorm:"type:decimal(16,2)"`
-	TaxAmount       decimal.Decimal `gorm:"type:decimal(16,2)"`
-	TaxPercent      decimal.Decimal `gorm:"type:decimal(10,2)"`
-	DiscountAmount  decimal.Decimal `gorm:"type:decimal(16,2)"`
-	DiscountPercent decimal.Decimal `gorm:"type:decimal(10,2)"`
-	SubTotal        decimal.Decimal `gorm:"type:decimal(16,2)"`
-	Sku             string          `gorm:"size:36;index"`
-	Name            string          `gorm:"size:255"`
-	Weight          decimal.Decimal `gorm:"type:decimal(10,2)"`
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
+	ID              string          `gorm:"primaryKey;type:varchar(255);not null;uniqueIndex" json:"id"`
+	OrderID         string          `gorm:"type:varchar(255);not null;index" json:"order_id"`
+	Order           Order           `gorm:"foreignKey:OrderID;references:ID"`
+	ProductID       string          `gorm:"type:varchar(255);not null;index" json:"product_id"`
+	Product         Product         `gorm:"foreignKey:ProductID;references:ID"`
+	ProductName     string          `gorm:"type:varchar(255);not null" json:"product_name"`
+	ProductSku      string          `gorm:"type:varchar(100)" json:"product_sku"`
+	Qty             int             `gorm:"not null" json:"qty"`
+	BasePrice       decimal.Decimal `gorm:"type:decimal(16,2);not null" json:"base_price"`
+	BaseTotal       decimal.Decimal `gorm:"type:decimal(16,2);not null" json:"base_total"`
+	TaxAmount       decimal.Decimal `gorm:"type:decimal(16,2);not null" json:"tax_amount"`
+	TaxPercent      decimal.Decimal `gorm:"type:decimal(10,2);not null" json:"tax_percent"`
+	DiscountAmount  decimal.Decimal `gorm:"type:decimal(16,2);not null" json:"discount_amount"`
+	DiscountPercent decimal.Decimal `gorm:"type:decimal(10,2);not null" json:"discount_percent"`
+	GrandTotal      decimal.Decimal `gorm:"type:decimal(16,2);not null" json:"grand_total"`
+	CreatedAt       time.Time       `json:"created_at"`
+	UpdatedAt       time.Time       `json:"updated_at"`
+	DeletedAt       gorm.DeletedAt  `gorm:"index" json:"deleted_at,omitempty"`
 }

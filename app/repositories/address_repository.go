@@ -18,6 +18,7 @@ type AddressRepository interface {
 	DeleteAddress(ctx context.Context, id string) error
 	SetPrimaryAddress(ctx context.Context, userID, addressID string) error
 	GetPrimaryAddressByUserID(ctx context.Context, userID string) (*models.Address, error)
+	SetAllAddressesNonPrimary(ctx context.Context, userID string) error // <-- Metode baru
 }
 
 type GormAddressRepository struct {
@@ -134,4 +135,14 @@ func (r *GormAddressRepository) GetPrimaryAddressByUserID(ctx context.Context, u
 		return nil, fmt.Errorf("failed to get primary address: %w", err)
 	}
 	return &address, nil
+}
+
+func (r *GormAddressRepository) SetAllAddressesNonPrimary(ctx context.Context, userID string) error {
+	result := r.db.WithContext(ctx).Model(&models.Address{}).Where("user_id = ?", userID).Update("is_primary", false)
+	if result.Error != nil {
+		log.Printf("GormAddressRepository.SetAllAddressesNonPrimary: Gagal mengatur alamat user %s menjadi non-utama: %v", userID, result.Error)
+		return result.Error
+	}
+	log.Printf("GormAddressRepository.SetAllAddressesNonPrimary: Berhasil mengatur %d alamat user %s menjadi non-utama.", result.RowsAffected, userID)
+	return nil
 }

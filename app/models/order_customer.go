@@ -1,22 +1,25 @@
 package models
 
-import "time"
+import (
+	"time"
+
+	"gorm.io/gorm"
+)
 
 type OrderCustomer struct {
-	ID         string `gorm:"size:36;not null;uniqueIndex;primary_key"`
-	User       User
-	UserID     string `gorm:"size:36;index"`
-	Order      Order
-	OrderID    string `gorm:"size:36;index"`
-	FirstName  string `gorm:"size:100;not null"`
-	LastName   string `gorm:"size:100;not null"`
-	CityID     string `gorm:"size:100;"`
-	ProvinceID string `gorm:"size:100;"`
-	Address1   string `gorm:"size:100;"`
-	Address2   string `gorm:"size:100;"`
-	Phone      string `gorm:"size:50;"`
-	Email      string `gorm:"size:100;"`
-	PostCode   string `gorm:"size:100;"`
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
+	gorm.Model
+	ID        string `gorm:"type:char(36);primaryKey"`
+	FirstName string `gorm:"type:varchar(255);not null"`
+	LastName  string `gorm:"type:varchar(255);null"`
+	Email     string `gorm:"type:varchar(255);not null"`
+	Phone     string `gorm:"type:varchar(20);not null"`
+	Address1  string `gorm:"type:varchar(255);not null"`
+	Address2  string `gorm:"type:varchar(255);null"`
+	// OLD: CityID       string `gorm:"type:varchar(10);not null"`     // DIHAPUS
+	// OLD: ProvinceID   string `gorm:"type:varchar(10);not null"` // DIHAPUS
+	LocationID   string `gorm:"type:varchar(20);not null"`  // NEW: Untuk menyimpan Subdistrict ID dari Komerce API
+	LocationName string `gorm:"type:varchar(255);not null"` // NEW: Untuk menyimpan nama lengkap lokasi (Kecamatan, Kota, Provinsi)
+	PostCode     string `gorm:"type:varchar(10);not null"`
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
 }

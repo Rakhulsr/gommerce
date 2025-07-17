@@ -10,17 +10,33 @@ import (
 	"github.com/Rakhulsr/go-ecommerce/app/cmd"
 	"github.com/Rakhulsr/go-ecommerce/app/configs"
 	"github.com/Rakhulsr/go-ecommerce/app/routes"
+	"github.com/midtrans/midtrans-go"
+	"github.com/midtrans/midtrans-go/snap"
 )
+
+var MidtransSnapClient snap.Client
+
+func init() {
+
+	MidtransSnapClient.New(configs.LoadENV.MIDTRANS_SERVER_KEY, midtrans.Sandbox)
+
+	midtrans.ClientKey = configs.LoadENV.MIDTRANS_CLIENT_KEY
+
+	midtrans.ServerKey = configs.LoadENV.MIDTRANS_SERVER_KEY
+
+	midtrans.Environment = midtrans.Sandbox
+
+	log.Println("✅ Midtrans Snap Client initialized.")
+}
 
 func main() {
 
+	configs.LoadEnv()
 	if len(os.Args) > 1 {
 		cmd.RunCli()
 		return
 	}
-	env := configs.LoadENV
-	log.Printf("DEBUG: RajaOngkir Base URL: %s", env.API_ONGKIR_BASE_URL)
-	log.Printf("DEBUG: RajaOngkir API Key: %s", env.API_ONGKIR_KEY)
+
 	rand.Seed(time.Now().UnixNano())
 
 	db, err := configs.OpenConnection()
@@ -38,7 +54,7 @@ func main() {
 		Handler: router,
 	}
 
-	log.Printf("🚀 Server starting on :%s", server.Addr)
+	log.Printf("🚀 Server starting on %s", server.Addr)
 	if err := server.ListenAndServe(); err != nil {
 		log.Println("failed to connecting to the server")
 	}

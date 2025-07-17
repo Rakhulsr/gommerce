@@ -29,6 +29,7 @@ type ProductRepositoryImpl interface {
 	DeleteProduct(ctx context.Context, id string) error
 	UpdateProductDiscount(ctx context.Context, productID string, discountPercent decimal.Decimal, discountAmount decimal.Decimal) error
 	IsSKUExists(ctx context.Context, sku string) (bool, error)
+	DecrementStock(ctx context.Context, tx *gorm.DB, productID string, quantity int) error
 }
 
 type productRepository struct {
@@ -334,4 +335,17 @@ func (p *productRepository) IsSKUExists(ctx context.Context, sku string) (bool, 
 		return false, err
 	}
 	return count > 0, nil
+}
+
+func (r *productRepository) DecrementStock(ctx context.Context, tx *gorm.DB, productID string, quantity int) error {
+	// Gunakan objek transaksi (tx) yang diberikan
+	result := tx.WithContext(ctx).Model(&models.Product{}).Where("id = ?", productID).
+		Update("stock", gorm.Expr("stock - ?", quantity))
+	if result.Error != nil {
+		return fmt.Errorf("failed to decrement stock for product %s: %w", productID, result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("no product found with ID %s to decrement stock", productID)
+	}
+	return nil
 }

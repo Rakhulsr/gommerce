@@ -64,7 +64,7 @@ func (h *ProductHandler) Products(w http.ResponseWriter, r *http.Request) {
 	)
 	breadcrumbs := []breadcrumb.Breadcrumb{
 		{Name: "Home", URL: "/"},
-		{Name: "Produk", URL: "/products"},
+		{Name: "Products", URL: "/products"},
 	}
 
 	var currentCategory models.Category
@@ -128,7 +128,7 @@ func (h *ProductHandler) ProductDetail(w http.ResponseWriter, r *http.Request) {
 
 	breadcrumbs := []breadcrumb.Breadcrumb{
 		{Name: "Home", URL: "/"},
-		{Name: "Produk", URL: "/products"},
+		{Name: "Products", URL: "/products"},
 	}
 
 	if len(product.Categories) > 0 {

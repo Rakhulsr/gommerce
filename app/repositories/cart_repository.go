@@ -2,12 +2,12 @@ package repositories
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"time"
 
 	"github.com/Rakhulsr/go-ecommerce/app/models"
-	"github.com/Rakhulsr/go-ecommerce/app/utils/calc"
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
@@ -16,14 +16,15 @@ import (
 type CartRepositoryImpl interface {
 	GetCartWithItems(ctx context.Context, cartID string) (*models.Cart, error)
 	GetByID(ctx context.Context, id string) (*models.Cart, error)
-	CreateCart(ctx context.Context, cart *models.Cart) error
+	GetOrCreateCartByUserID(ctx context.Context, cartID, userID string) (*models.Cart, error)
+	GetCartByUserID(ctx context.Context, userID string) (*models.Cart, error)
 	UpdateCartSummary(ctx context.Context, cartID string) error
 	GetCartItemCount(ctx context.Context, cartID string) (int, error)
 	UpdateCart(ctx context.Context, cart *models.Cart) error
-	GetOrCreateCartByUserID(ctx context.Context, userID string) (*models.Cart, error)
-	DeleteCart(ctx context.Context, cartID string) error
+	DeleteCart(ctx context.Context, db *gorm.DB, cartID string) error
 	CreateCartForUser(ctx context.Context, userID string) (*models.Cart, error)
 	GetAllCarts(ctx context.Context) ([]models.Cart, error)
+	AddCart(ctx context.Context, cart *models.Cart) (*models.Cart, error)
 }
 
 type cartRepository struct {
@@ -65,107 +66,46 @@ func (r *cartRepository) GetByID(ctx context.Context, id string) (*models.Cart, 
 	return &cart, nil
 }
 
-func (r *cartRepository) CreateCart(ctx context.Context, cart *models.Cart) error {
-	return r.db.WithContext(ctx).Create(cart).Error
+func (r *cartRepository) AddCart(ctx context.Context, cart *models.Cart) (*models.Cart, error) {
+	result := r.db.WithContext(ctx).Create(cart)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	return cart, nil
 }
 
 func (r *cartRepository) UpdateCartSummary(ctx context.Context, cartID string) error {
-	var items []models.CartItem
-
-	// Penting: Preload Product untuk mendapatkan diskon dari Product
-	if err := r.db.WithContext(ctx).
-		Preload("Product").
-		Where("cart_id = ?", cartID).
-		Find(&items).Error; err != nil {
-		return err
-	}
-
-	var baseTotal, taxTotal, discountTotal, grandTotal decimal.Decimal
-	var totalWeight int = 0
-
-	var taxPercentCart, discountPercentCart decimal.Decimal // Untuk ringkasan cart
-
-	for _, item := range items {
-		// Pastikan Product dimuat sebelum mengakses diskon
-		if item.Product.ID == "" {
-			// Ini seharusnya tidak terjadi jika Preload berhasil, tapi sebagai fallback
-			log.Printf("UpdateCartSummary: Product not preloaded for item %s, attempting to fetch.", item.ID)
-			var product models.Product
-			if err := r.db.WithContext(ctx).First(&product, "id = ?", item.ProductID).Error; err == nil {
-				item.Product = product
-			} else {
-				log.Printf("UpdateCartSummary: Failed to fetch product %s for item %s: %v", item.ProductID, item.ID, err)
-				continue // Lewati item ini jika produk tidak ditemukan
-			}
-		}
-
-		// Hitung ulang BaseTotal, TaxAmount, DiscountAmount, GrandTotal untuk setiap item
-		// Berdasarkan harga produk dan diskon produk
-		item.BasePrice = item.Product.Price
-		item.BaseTotal = item.BasePrice.Mul(decimal.NewFromInt(int64(item.Qty)))
-
-		// Diskon diambil dari produk
-		itemDiscountAmount := item.Product.DiscountAmount.Mul(decimal.NewFromInt(int64(item.Qty)))
-		itemDiscountPercent := item.Product.DiscountPercent
-
-		item.TaxPercent = calc.GetTaxPercent()                                     // Asumsi pajak global
-		item.TaxAmount = calc.CalculateTax(item.BaseTotal.Sub(itemDiscountAmount)) // Pajak setelah diskon
-
-		item.SubTotal = item.BaseTotal.Sub(itemDiscountAmount)
-		item.GrandTotal = item.SubTotal.Add(item.TaxAmount)
-
-		// Perbarui item di database jika ada perubahan
-		if err := r.db.WithContext(ctx).Save(&item).Error; err != nil {
-			log.Printf("UpdateCartSummary: Gagal memperbarui cart item %s: %v", item.ID, err)
-		}
-
-		baseTotal = baseTotal.Add(item.BaseTotal)
-		taxTotal = taxTotal.Add(item.TaxAmount)
-		discountTotal = discountTotal.Add(itemDiscountAmount) // Total diskon dari semua item
-		grandTotal = grandTotal.Add(item.GrandTotal)
-		if item.Product.ID != "" {
-			totalWeight += int(item.Product.Weight.Mul(decimal.NewFromInt(int64(item.Qty))).IntPart())
-		}
-		// Untuk ringkasan cart, kita bisa mengambil diskon dari item pertama atau rata-rata
-		// Untuk kesederhanaan, kita bisa mengambil dari item yang ada atau membiarkannya nol jika tidak ada diskon global
-		if taxPercentCart.IsZero() && item.TaxPercent.GreaterThan(decimal.Zero) {
-			taxPercentCart = item.TaxPercent
-		}
-		if discountPercentCart.IsZero() && itemDiscountPercent.GreaterThan(decimal.Zero) {
-			discountPercentCart = itemDiscountPercent
-		}
-	}
-
-	return r.db.WithContext(ctx).
-		Model(&models.Cart{}).
-		Where("id = ?", cartID).
-		Updates(models.Cart{
-			BaseTotalPrice:  baseTotal,
-			TaxAmount:       taxTotal,
-			TaxPercent:      taxPercentCart,
-			DiscountAmount:  discountTotal,       // Total diskon dari semua item
-			DiscountPercent: discountPercentCart, // Persentase diskon (bisa jadi rata-rata atau dari satu item)
-			GrandTotal:      grandTotal,
-			TotalWeight:     totalWeight,
-			UpdatedAt:       time.Now(),
-		}).Error
-}
-func (r *cartRepository) DeleteCart(ctx context.Context, cartID string) error {
-
-	items, err := r.cartItemRepo.GetByCartID(ctx, cartID)
+	cart, err := r.GetCartWithItems(ctx, cartID)
 	if err != nil {
-		return fmt.Errorf("failed to get cart items for deletion of cart %s: %w", cartID, err)
-	}
-
-	for _, item := range items {
-		if err := r.cartItemRepo.Delete(ctx, item.CartID, item.ProductID); err != nil {
-			log.Printf("Warning: Failed to delete cart item %s from cart %s during cart deletion: %v", item.ID, cartID, err)
-
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			log.Printf("UpdateCartSummary: Keranjang dengan ID %s tidak ditemukan. Mungkin sudah dihapus.", cartID)
+			return nil
 		}
+		return fmt.Errorf("gagal mengambil keranjang dengan item untuk ringkasan: %w", err)
+	}
+	if cart == nil {
+		log.Printf("UpdateCartSummary: Keranjang dengan ID %s kosong setelah diambil. Mungkin sudah dihapus.", cartID)
+		return nil
 	}
 
-	if err := r.db.WithContext(ctx).Delete(&models.Cart{}, "id = ?", cartID).Error; err != nil {
-		return fmt.Errorf("failed to delete cart %s: %w", cartID, err)
+	cart.CalculateTotals()
+
+	err = r.UpdateCart(ctx, cart)
+	if err != nil {
+		return fmt.Errorf("gagal memperbarui ringkasan keranjang: %w", err)
+	}
+	log.Printf("UpdateCartSummary: Ringkasan keranjang untuk ID %s berhasil diperbarui. TotalItems: %d", cartID, cart.TotalItems)
+	return nil
+}
+
+func (r *cartRepository) DeleteCart(ctx context.Context, tx *gorm.DB, cartID string) error {
+
+	result := tx.WithContext(ctx).Where("id = ?", cartID).Delete(&models.Cart{})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return errors.New("cart not found or already deleted")
 	}
 	return nil
 }
@@ -195,30 +135,6 @@ func (r *cartRepository) CreateCartForUser(ctx context.Context, userID string) (
 	return newCart, nil
 }
 
-func (r *cartRepository) GetOrCreateCartByUserID(ctx context.Context, userID string) (*models.Cart, error) {
-	var cart models.Cart
-	err := r.db.WithContext(ctx).Where("user_id = ?", userID).First(&cart).Error
-	if err != nil {
-		if err == gorm.ErrRecordNotFound {
-
-			newCart := &models.Cart{
-				ID:     uuid.New().String(),
-				UserID: userID,
-			}
-			if createErr := r.db.WithContext(ctx).Create(newCart).Error; createErr != nil {
-				log.Printf("CartRepository: Failed to create cart for user %s: %v", userID, createErr)
-				return nil, createErr
-			}
-			log.Printf("CartRepository: Created new cart %s for user %s", newCart.ID, userID)
-			return newCart, nil
-		}
-		log.Printf("CartRepository: Error finding cart by user ID %s: %v", userID, err)
-		return nil, err
-	}
-	log.Printf("CartRepository: Found existing cart %s for user %s", cart.ID, userID)
-	return &cart, nil
-}
-
 func (r *cartRepository) UpdateCart(ctx context.Context, cart *models.Cart) error {
 	cart.UpdatedAt = time.Now()
 
@@ -238,4 +154,64 @@ func (r *cartRepository) GetAllCarts(ctx context.Context) ([]models.Cart, error)
 		return nil, fmt.Errorf("failed to get all carts: %w", err)
 	}
 	return carts, nil
+}
+
+func (r *cartRepository) GetOrCreateCartByUserID(ctx context.Context, cartID, userID string) (*models.Cart, error) {
+	var cart *models.Cart
+	var err error
+
+	if cartID != "" {
+		cart, err = r.GetByID(ctx, cartID)
+		if err != nil {
+			return nil, fmt.Errorf("gagal mendapatkan keranjang berdasarkan ID: %w", err)
+		}
+		if cart != nil && cart.UserID != userID {
+
+			log.Printf("CartRepository: CartID %s di sesi bukan milik UserID %s. Mencari berdasarkan UserID.", cartID, userID)
+			cart = nil
+		}
+	}
+
+	if cart == nil && userID != "" {
+		cart, err = r.GetCartByUserID(ctx, userID)
+		if err != nil {
+			return nil, fmt.Errorf("gagal mendapatkan keranjang berdasarkan UserID: %w", err)
+		}
+	}
+
+	if cart == nil {
+
+		newCart := &models.Cart{
+			ID:              uuid.New().String(),
+			UserID:          userID,
+			BaseTotalPrice:  decimal.Zero,
+			TaxAmount:       decimal.Zero,
+			TaxPercent:      decimal.Zero,
+			DiscountAmount:  decimal.Zero,
+			DiscountPercent: decimal.Zero,
+			GrandTotal:      decimal.Zero,
+			TotalWeight:     0,
+			TotalItems:      0,
+		}
+		createdCart, createErr := r.AddCart(ctx, newCart)
+		if createErr != nil {
+			return nil, fmt.Errorf("gagal membuat keranjang baru: %w", createErr)
+		}
+		cart = createdCart
+		log.Printf("CartRepository: Keranjang baru dibuat untuk UserID: %s, ID: %s", userID, cart.ID)
+	}
+
+	return cart, nil
+}
+
+func (r *cartRepository) GetCartByUserID(ctx context.Context, userID string) (*models.Cart, error) {
+	var cart models.Cart
+	result := r.db.WithContext(ctx).Where("user_id = ?", userID).First(&cart)
+	if result.Error != nil {
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, result.Error
+	}
+	return &cart, nil
 }

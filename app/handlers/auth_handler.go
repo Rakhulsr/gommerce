@@ -47,6 +47,7 @@ type UserForm struct {
 	FirstName string `form:"first_name" validate:"required,min=2,max=100"`
 	LastName  string `form:"last_name" validate:"required,min=2,max=100"`
 	Email     string `form:"email" validate:"required,email"`
+	Phone     string `form:"phone" validate:"min=10,max=20"`
 	Password  string `form:"password" validate:"omitempty,min=6"`
 }
 
@@ -138,7 +139,7 @@ func (h *AuthHandler) LoginPostHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	userCart, err := h.cartRepo.GetOrCreateCartByUserID(r.Context(), user.ID)
+	userCart, err := h.cartRepo.GetOrCreateCartByUserID(r.Context(), "", user.ID)
 	if err != nil {
 		log.Printf("LoginPostHandler: Failed to get or create cart for user %s: %v", user.ID, err)
 
@@ -185,10 +186,11 @@ func (h *AuthHandler) RegisterPostHandler(w http.ResponseWriter, r *http.Request
 	firstName := r.FormValue("firstname")
 	lastName := r.FormValue("lastname")
 	email := r.FormValue("email")
+	phone := r.FormValue("phone")
 	password := r.FormValue("password")
 	confirmPassword := r.FormValue("confirm_password")
 
-	if firstName == "" || lastName == "" || email == "" || password == "" || confirmPassword == "" {
+	if firstName == "" || lastName == "" || email == "" || phone == "" || password == "" || confirmPassword == "" {
 		http.Redirect(w, r, fmt.Sprintf("/register?status=error&message=%s", url.QueryEscape("Semua kolom harus diisi.")), http.StatusSeeOther)
 		return
 	}
@@ -203,6 +205,7 @@ func (h *AuthHandler) RegisterPostHandler(w http.ResponseWriter, r *http.Request
 		LastName:  lastName,
 		Email:     email,
 		Password:  password,
+		Phone:     phone,
 		Role:      models.RoleCustomer,
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
@@ -234,7 +237,7 @@ func (h *AuthHandler) RegisterPostHandler(w http.ResponseWriter, r *http.Request
 
 	log.Printf("RegisterPostHandler: User %s (%s) registered successfully.", user.Email, user.ID)
 
-	newCart, err := h.cartRepo.CreateCartForUser(r.Context(), user.ID)
+	newCart, err := h.cartRepo.GetOrCreateCartByUserID(r.Context(), "", user.ID)
 	if err != nil {
 		log.Printf("RegisterPostHandler: Failed to create cart for new user %s: %v", user.ID, err)
 
@@ -248,62 +251,19 @@ func (h *AuthHandler) RegisterPostHandler(w http.ResponseWriter, r *http.Request
 func (h *AuthHandler) LogoutHandler(w http.ResponseWriter, r *http.Request) {
 	userID, ok := r.Context().Value(helpers.ContextKeyUserID).(string)
 	if ok && userID != "" {
+
 		err := h.userRepo.UpdateRememberToken(r.Context(), userID, "", "")
 		if err != nil {
 			log.Printf("LogoutHandler: Failed to clear remember token in DB for user %s: %v", userID, err)
 		}
 	}
 
-	err := h.sessionStore.ClearUserID(w, r)
-	if err != nil {
-		log.Printf("LogoutHandler: Error clearing user session: %v", err)
-		http.Redirect(w, r, fmt.Sprintf("/?status=error&message=%s", url.QueryEscape("Gagal logout.")), http.StatusSeeOther)
-		return
-	}
+	h.sessionStore.ClearSession(w, r)
 
-	helpers.ClearCookie(w, "remember_token")
+	helpers.ClearCookie(w, helpers.RememberMeCookieName)
 
+	log.Printf("LogoutHandler: User %s successfully logged out.", userID)
 	http.Redirect(w, r, "/?status=success&message=Anda%20telah%20berhasil%20logout.", http.StatusSeeOther)
-}
-
-func (h *AuthHandler) ProfileHandler(w http.ResponseWriter, r *http.Request) {
-	userID, ok := r.Context().Value(helpers.ContextKeyUserID).(string)
-	if !ok || userID == "" {
-		log.Printf("ProfileHandler: UserID not found in context for /profile. Redirecting to login.")
-		http.Redirect(w, r, fmt.Sprintf("/login?status=warning&message=%s", url.QueryEscape("Anda harus login untuk mengakses halaman ini.")), http.StatusSeeOther)
-		return
-	}
-
-	user, err := h.userRepo.FindByID(r.Context(), userID)
-	if err != nil {
-		log.Printf("ProfileHandler: Error getting user %s from DB: %v", userID, err)
-		http.Redirect(w, r, fmt.Sprintf("/?status=error&message=%s", url.QueryEscape("Gagal mengambil data profil.")), http.StatusSeeOther)
-		return
-	}
-	if user == nil {
-		log.Printf("ProfileHandler: User ID %s not found in DB despite being logged in. Clearing session.", userID)
-		h.sessionStore.ClearUserID(w, r)
-		helpers.ClearCookie(w, "remember_token")
-		http.Redirect(w, r, fmt.Sprintf("/login?status=warning&message=%s", url.QueryEscape("Sesi Anda tidak valid. Silakan login kembali.")), http.StatusSeeOther)
-		return
-	}
-
-	breadcrumbs := []breadcrumb.Breadcrumb{
-		{Name: "Home", URL: "/"},
-		{Name: "Profil Saya", URL: "/profile"},
-	}
-
-	pageSpecificData := map[string]interface{}{
-		"title":         "Profil Saya",
-		"Breadcrumbs":   breadcrumbs,
-		"User":          user,
-		"MessageStatus": r.URL.Query().Get("status"),
-		"Message":       r.URL.Query().Get("message"),
-		"IsAuthPage":    false,
-	}
-
-	data := helpers.GetBaseData(r, pageSpecificData)
-	_ = h.render.HTML(w, http.StatusOK, "auth/profile", data)
 }
 
 func (h *AuthHandler) ForgotPasswordGetHandler(w http.ResponseWriter, r *http.Request) {
@@ -567,47 +527,77 @@ func (h *AuthHandler) VerifyOTPPostHandler(w http.ResponseWriter, r *http.Reques
 	http.Redirect(w, r, fmt.Sprintf("/reset-password?token=%s", resetSessionToken), http.StatusSeeOther)
 }
 
-func (h *AuthHandler) UpdateProfilePage(w http.ResponseWriter, r *http.Request) {
+func (h *AuthHandler) ProfileHandler(w http.ResponseWriter, r *http.Request) {
 	userID, ok := r.Context().Value(helpers.ContextKeyUserID).(string)
 	if !ok || userID == "" {
-		http.Redirect(w, r, "/login?status=error&message=Silakan login terlebih dahulu", http.StatusSeeOther)
+		log.Printf("ProfileHandler: UserID not found in context. Redirecting to login.")
+		http.Redirect(w, r, "/login?status=warning&message=Anda%20harus%20login%20untuk%20mengakses%20halaman%20ini.", http.StatusSeeOther)
 		return
 	}
 
 	user, err := h.userRepo.FindByID(r.Context(), userID)
 	if err != nil || user == nil {
-		http.Redirect(w, r, "/?status=error&message=Gagal memuat profil", http.StatusSeeOther)
+		log.Printf("ProfileHandler: Failed to get user %s from DB: %v", userID, err)
+		h.sessionStore.ClearUserID(w, r)
+		helpers.ClearCookie(w, "remember_token")
+		http.Redirect(w, r, "/login?status=warning&message=Sesi%20Anda%20tidak%20valid.%20Silakan%20login%20kembali.", http.StatusSeeOther)
 		return
 	}
 
-	formData := UserForm{
+	form := UserForm{
 		ID:        user.ID,
 		FirstName: user.FirstName,
 		LastName:  user.LastName,
 		Email:     user.Email,
+		Phone:     user.Phone,
 	}
 
-	// Gunakan map untuk data khusus halaman
-	pageData := map[string]interface{}{
-		"Title":      "Edit Profil",
-		"IsAuthPage": true,
-		"Breadcrumbs": []breadcrumb.Breadcrumb{
-			{Name: "Beranda", URL: "/"},
-			{Name: "Profil", URL: "/profile"},
-			{Name: "Edit", URL: ""},
-		},
-		"UserForm": &formData,
-		"Errors":   map[string]string{},
+	data := helpers.GetBaseData(r, map[string]interface{}{
+		"title":         "Profil Saya",
+		"Breadcrumbs":   []breadcrumb.Breadcrumb{{Name: "Home", URL: "/"}, {Name: "Profile", URL: "/profile"}},
+		"UserForm":      &form,
+		"MessageStatus": r.URL.Query().Get("status"),
+		"Message":       r.URL.Query().Get("message"),
+		"IsAuthPage":    false,
+		"Errors":        map[string]string{},
+	})
+
+	h.render.HTML(w, http.StatusOK, "auth/profile", data)
+}
+
+func (h *AuthHandler) UpdateProfilePage(w http.ResponseWriter, r *http.Request) {
+	userID, ok := r.Context().Value(helpers.ContextKeyUserID).(string)
+	if !ok || userID == "" {
+		http.Redirect(w, r, "/login?status=error&message=Silakan%20login%20terlebih%20dahulu", http.StatusSeeOther)
+		return
 	}
 
-	// Tambahkan base data (seperti CartCount, UserID, dll)
-	data := helpers.GetBaseData(r, pageData)
+	user, err := h.userRepo.FindByID(r.Context(), userID)
+	if err != nil || user == nil {
+		http.Redirect(w, r, "/?status=error&message=Gagal%20memuat%20profil", http.StatusSeeOther)
+		return
+	}
+
+	form := UserForm{
+		ID:        user.ID,
+		FirstName: user.FirstName,
+		LastName:  user.LastName,
+		Email:     user.Email,
+		Phone:     user.Phone,
+	}
+
+	data := helpers.GetBaseData(r, map[string]interface{}{
+		"title":       "Edit Profil",
+		"IsAuthPage":  true,
+		"Breadcrumbs": []breadcrumb.Breadcrumb{{Name: "Beranda", URL: "/"}, {Name: "Profile", URL: "/profile"}, {Name: "Edit", URL: "/profile/edit"}},
+		"UserForm":    &form,
+		"Errors":      map[string]string{},
+	})
 
 	h.render.HTML(w, http.StatusOK, "auth/profile/edit", data)
 }
 
 func (h *AuthHandler) UpdateProfilePost(w http.ResponseWriter, r *http.Request) {
-
 	userID, ok := r.Context().Value(helpers.ContextKeyUserID).(string)
 	if !ok || userID == "" {
 		http.Redirect(w, r, "/login?status=error&message=Unauthorized", http.StatusSeeOther)
@@ -616,43 +606,46 @@ func (h *AuthHandler) UpdateProfilePost(w http.ResponseWriter, r *http.Request) 
 
 	user, err := h.userRepo.FindByID(r.Context(), userID)
 	if err != nil || user == nil {
-		log.Printf("UpdateProfile: Gagal ambil data user dari database: %v", err)
-		http.Redirect(w, r, "/profile?status=error&message=Gagal memuat data profil", http.StatusSeeOther)
+		log.Printf("UpdateProfile: Failed to get user: %v", err)
+		http.Redirect(w, r, "/profile?status=error&message=Gagal%20memuat%20data%20profil", http.StatusSeeOther)
 		return
 	}
 
 	if err := r.ParseForm(); err != nil {
-		log.Printf("UpdateProfile: Gagal parsing form: %v", err)
-		http.Redirect(w, r, "/profile?status=error&message=Gagal memproses form", http.StatusSeeOther)
+		log.Printf("UpdateProfile: Failed to parse form: %v", err)
+		http.Redirect(w, r, "/profile?status=error&message=Gagal%20memproses%20form", http.StatusSeeOther)
 		return
 	}
 
-	var form UserForm
-	form.FirstName = r.PostFormValue("first_name")
-	form.LastName = r.PostFormValue("last_name")
-	form.Email = r.PostFormValue("email")
-	form.Password = r.PostFormValue("password")
-	form.ID = user.ID
+	form := UserForm{
+		ID:        user.ID,
+		FirstName: r.PostFormValue("first_name"),
+		LastName:  r.PostFormValue("last_name"),
+		Email:     r.PostFormValue("email"),
+		Phone:     r.PostFormValue("phone"),
+		Password:  r.PostFormValue("password"),
+	}
 
 	if err := h.validator.Struct(&form); err != nil {
 		validationErrors := err.(validator.ValidationErrors)
 		formattedErrors := helpers.FormatValidationErrors(validationErrors)
 
-		data := map[string]interface{}{
-			"title":      "Edit Profil",
-			"UserData":   &form,
-			"Errors":     formattedErrors,
-			"IsAuthPage": false,
-		}
-		datas := helpers.GetBaseData(r, data)
-		h.render.HTML(w, http.StatusOK, "auth/profile", datas)
+		data := helpers.GetBaseData(r, map[string]interface{}{
+			"title":       "Edit Profil",
+			"UserForm":    &form,
+			"Errors":      formattedErrors,
+			"IsAuthPage":  true,
+			"Breadcrumbs": []breadcrumb.Breadcrumb{{Name: "Beranda", URL: "/"}, {Name: "Profile", URL: "/profile"}, {Name: "Edit", URL: ""}},
+		})
+
+		h.render.HTML(w, http.StatusOK, "auth/profile/edit", data)
 		return
 	}
 
 	if user.Email != form.Email {
 		existingUser, _ := h.userRepo.FindByEmail(r.Context(), form.Email)
 		if existingUser != nil && existingUser.ID != user.ID {
-			http.Redirect(w, r, "/profile?status=error&message=Email sudah digunakan oleh pengguna lain", http.StatusSeeOther)
+			http.Redirect(w, r, "/profile?status=error&message=Email%20sudah%20digunakan%20oleh%20pengguna%20lain", http.StatusSeeOther)
 			return
 		}
 	}
@@ -660,10 +653,11 @@ func (h *AuthHandler) UpdateProfilePost(w http.ResponseWriter, r *http.Request) 
 	user.FirstName = form.FirstName
 	user.LastName = form.LastName
 	user.Email = form.Email
+	user.Phone = form.Phone
 
 	if form.Password != "" {
 		if len(form.Password) < 6 {
-			http.Redirect(w, r, "/profile?status=error&message=Password minimal 6 karakter", http.StatusSeeOther)
+			http.Redirect(w, r, "/profile?status=error&message=Password%20minimal%206%20karakter", http.StatusSeeOther)
 			return
 		}
 		user.Password = helpers.HashPassword(form.Password)
@@ -671,10 +665,11 @@ func (h *AuthHandler) UpdateProfilePost(w http.ResponseWriter, r *http.Request) 
 
 	err = h.userRepo.UpdateUser(r.Context(), user)
 	if err != nil {
-		log.Printf("UpdateProfile: Gagal update user: %v", err)
-		http.Redirect(w, r, "/profile?status=error&message=Gagal memperbarui profil", http.StatusSeeOther)
+		log.Printf("UpdateProfile: Failed to update user: %v", err)
+		http.Redirect(w, r, "/profile?status=error&message=Gagal%20memperbarui%20profil", http.StatusSeeOther)
 		return
 	}
 
-	http.Redirect(w, r, "/profile?status=success&message=Profil berhasil diperbarui", http.StatusSeeOther)
+	log.Printf("data update:%v", user)
+	http.Redirect(w, r, "/profile?status=success&message=Profil%20berhasil%20diperbarui", http.StatusSeeOther)
 }

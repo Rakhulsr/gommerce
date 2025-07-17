@@ -18,6 +18,7 @@ type CartItemRepositoryImpl interface {
 	GetByID(ctx context.Context, id string) (*models.CartItem, error)
 	GetByCartID(ctx context.Context, cartID string) ([]models.CartItem, error)
 	GetCartAndProduct(ctx context.Context, cartID, productID string) (*models.CartItem, error)
+	ClearCartItems(ctx context.Context, tx *gorm.DB, cartID string) error
 }
 
 func NewCartItemRepository(db *gorm.DB) CartItemRepositoryImpl {
@@ -63,4 +64,9 @@ func (r *CartItemRepository) GetCartAndProduct(ctx context.Context, cartID, prod
 	}
 
 	return &item, nil
+}
+
+func (r *CartItemRepository) ClearCartItems(ctx context.Context, tx *gorm.DB, cartID string) error {
+	// Gunakan objek transaksi (tx) yang diberikan untuk operasi database
+	return tx.WithContext(ctx).Where("cart_id = ?", cartID).Delete(&models.CartItem{}).Error
 }

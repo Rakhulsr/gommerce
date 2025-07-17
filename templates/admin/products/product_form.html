@@ -3,9 +3,7 @@
     {{ template "admin_sidebar" . }}
 
     <div class="flex-1 px-6 py-8">
-        <div class="flex justify-between items-center mb-6">
-            <h1 class="text-3xl font-bold text-gray-800">{{ if .IsEdit }}Edit Produk{{ else }}Tambah Produk Baru{{ end }}</h1>
-        </div>
+        <h1 class="text-3xl font-bold text-gray-800 mb-6">{{ if .IsEdit }}Edit Produk{{ else }}Tambah Produk Baru{{ end }}</h1>
 
         {{ if .Message }}
         <div id="flash-message" class="mb-4 p-4 rounded-lg relative flex items-center justify-between shadow-sm
@@ -21,9 +19,10 @@
         </div>
         {{ end }}
 
-        <div class="bg-blue-50 rounded-lg shadow-sm p-6">
+        <div class="bg-white rounded-lg shadow-sm p-6">
             <form action="{{ .FormAction }}" method="POST">
                 {{ if .IsEdit }}
+                    <input type="hidden" name="_method" value="PUT">
                     <input type="hidden" name="id" value="{{ .ProductData.ID }}">
                 {{ end }}
 
@@ -31,7 +30,7 @@
                     <label for="name" class="block text-gray-700 text-sm font-bold mb-2">Nama Produk:</label>
                     <input type="text" id="name" name="name" value="{{ .ProductData.Name }}"
                            class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline {{ if .Errors.name }}border-red-500{{ end }}"
-                           placeholder="Masukkan nama produk">
+                           placeholder="Masukkan Nama Produk">
                     {{ if .Errors.name }}
                         <p class="text-red-500 text-xs italic">{{ .Errors.name }}</p>
                     {{ end }}
@@ -39,9 +38,9 @@
 
                 <div class="mb-4">
                     <label for="description" class="block text-gray-700 text-sm font-bold mb-2">Deskripsi:</label>
-                    <textarea id="description" name="description" rows="5"
-                              class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline {{ if .Errors.description }}border-red-500{{ end }}"
-                              placeholder="Masukkan deskripsi produk">{{ .ProductData.Description }}</textarea>
+                    <textarea id="description" name="description"
+                              class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline h-32 {{ if .Errors.description }}border-red-500{{ end }}"
+                              placeholder="Masukkan Deskripsi Produk">{{ .ProductData.Description }}</textarea>
                     {{ if .Errors.description }}
                         <p class="text-red-500 text-xs italic">{{ .Errors.description }}</p>
                     {{ end }}
@@ -51,7 +50,7 @@
                     <label for="sku" class="block text-gray-700 text-sm font-bold mb-2">SKU:</label>
                     <input type="text" id="sku" name="sku" value="{{ .ProductData.SKU }}"
                            class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline {{ if .Errors.sku }}border-red-500{{ end }}"
-                           placeholder="Masukkan SKU produk">
+                           placeholder="Masukkan SKU">
                     {{ if .Errors.sku }}
                         <p class="text-red-500 text-xs italic">{{ .Errors.sku }}</p>
                     {{ end }}
@@ -61,7 +60,7 @@
                     <label for="price" class="block text-gray-700 text-sm font-bold mb-2">Harga:</label>
                     <input type="number" step="0.01" id="price" name="price" value="{{ .ProductData.Price }}"
                            class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline {{ if .Errors.price }}border-red-500{{ end }}"
-                           placeholder="Masukkan harga produk">
+                           placeholder="Masukkan Harga">
                     {{ if .Errors.price }}
                         <p class="text-red-500 text-xs italic">{{ .Errors.price }}</p>
                     {{ end }}
@@ -71,7 +70,7 @@
                     <label for="stock" class="block text-gray-700 text-sm font-bold mb-2">Stok:</label>
                     <input type="number" id="stock" name="stock" value="{{ .ProductData.Stock }}"
                            class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline {{ if .Errors.stock }}border-red-500{{ end }}"
-                           placeholder="Masukkan stok produk">
+                           placeholder="Masukkan Stok">
                     {{ if .Errors.stock }}
                         <p class="text-red-500 text-xs italic">{{ .Errors.stock }}</p>
                     {{ end }}
@@ -81,32 +80,29 @@
                     <label for="weight" class="block text-gray-700 text-sm font-bold mb-2">Berat (gram):</label>
                     <input type="number" step="0.01" id="weight" name="weight" value="{{ .ProductData.Weight }}"
                            class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline {{ if .Errors.weight }}border-red-500{{ end }}"
-                           placeholder="Masukkan berat produk dalam gram">
+                           placeholder="Masukkan Berat">
                     {{ if .Errors.weight }}
                         <p class="text-red-500 text-xs italic">{{ .Errors.weight }}</p>
                     {{ end }}
                 </div>
 
+                <!-- DISKON PER PRODUK -->
                 <div class="mb-4">
-                    <label for="image_path" class="block text-gray-700 text-sm font-bold mb-2">URL Gambar (Path):</label>
-                    <input type="text" id="image_path" name="image_path" value="{{ .ProductData.ImagePath }}"
-                           class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline {{ if .Errors.image_path }}border-red-500{{ end }}"
-                           placeholder="Contoh: /images/products/nama_gambar.jpg">
-                    {{ if .Errors.image_path }}
-                        <p class="text-red-500 text-xs italic">{{ .Errors.image_path }}</p>
-                    {{ end }}
-                    {{ if .ProductData.ImagePath }}
-                        <div class="mt-2">
-                            <img src="{{ .ProductData.ImagePath }}" alt="Gambar Produk" class="max-w-xs h-auto rounded-md shadow-sm">
-                        </div>
+                    <label for="discount_percent" class="block text-gray-700 text-sm font-bold mb-2">Diskon (Persen):</label>
+                    <input type="number" step="0.01" id="discount_percent" name="discount_percent" value="{{ .ProductData.DiscountPercent }}"
+                           class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline {{ if .Errors.discount_percent }}border-red-500{{ end }}"
+                           placeholder="Masukkan Persentase Diskon (0-100)" min="0" max="100">
+                    {{ if .Errors.discount_percent }}
+                        <p class="text-red-500 text-xs italic">{{ .Errors.discount_percent }}</p>
                     {{ end }}
                 </div>
+                <!-- AKHIR DISKON PER PRODUK -->
 
                 <div class="mb-4">
                     <label for="category_id" class="block text-gray-700 text-sm font-bold mb-2">Kategori:</label>
                     <select id="category_id" name="category_id"
                             class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline {{ if .Errors.category_id }}border-red-500{{ end }}">
-                        <option value="">-- Pilih Kategori --</option>
+                        <option value="">Pilih Kategori</option>
                         {{ range .Categories }}
                             <option value="{{ .ID }}" {{ if eq .ID $.ProductData.CategoryID }}selected{{ end }}>{{ .Name }}</option>
                         {{ end }}
@@ -116,11 +112,22 @@
                     {{ end }}
                 </div>
 
+                <div class="mb-4">
+                    <label for="image_path" class="block text-gray-700 text-sm font-bold mb-2">URL Gambar (Opsional):</label>
+                    <input type="text" id="image_path" name="image_path" value="{{ .ProductData.ImagePath }}"
+                           class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline {{ if .Errors.image_path }}border-red-500{{ end }}"
+                           placeholder="Masukkan URL Gambar (misal: /static/images/product.jpg)">
+                    {{ if .Errors.image_path }}
+                        <p class="text-red-500 text-xs italic">{{ .Errors.image_path }}</p>
+                    {{ end }}
+                </div>
+
                 <div class="flex items-center justify-between">
-                    <button type="submit" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md shadow-md transition duration-300 ease-in-out">
+                    <button type="submit"
+                            class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md shadow-md transition duration-300 ease-in-out">
                         {{ if .IsEdit }}Perbarui Produk{{ else }}Tambah Produk{{ end }}
                     </button>
-                    <a href="/admin/products" class="inline-block align-baseline font-bold text-sm text-gray-600 hover:text-gray-800">
+                    <a href="/admin/products" class="inline-block align-baseline font-bold text-sm text-blue-500 hover:text-blue-800">
                         Batal
                     </a>
                 </div>
@@ -128,4 +135,18 @@
         </div>
     </div>
 </div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const flashMessage = document.getElementById('flash-message');
+        if (flashMessage) {
+            setTimeout(() => {
+                flashMessage.classList.add('animate-fade-out');
+                flashMessage.addEventListener('animationend', () => {
+                    flashMessage.remove();
+                });
+            }, 5000);
+        }
+    });
+</script>
 {{ end }}
