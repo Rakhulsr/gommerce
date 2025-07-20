@@ -9,6 +9,7 @@ import (
 
 type OrderItemRepository interface {
 	BulkCreate(ctx context.Context, db *gorm.DB, items []models.OrderItem) error
+	GetByOrderID(ctx context.Context, orderID string) ([]models.OrderItem, error)
 }
 
 type OrderItemRepositoryImpl struct {
@@ -21,4 +22,13 @@ func NewOrderItemRepository(db *gorm.DB) OrderItemRepository {
 
 func (r *OrderItemRepositoryImpl) BulkCreate(ctx context.Context, db *gorm.DB, items []models.OrderItem) error {
 	return db.WithContext(ctx).Create(&items).Error
+}
+
+func (r *OrderItemRepositoryImpl) GetByOrderID(ctx context.Context, orderID string) ([]models.OrderItem, error) {
+	var items []models.OrderItem
+	err := r.DB.WithContext(ctx).Where("order_id = ?", orderID).Find(&items).Error
+	if err != nil {
+		return nil, err
+	}
+	return items, nil
 }

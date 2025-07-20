@@ -32,6 +32,7 @@ type AdminHandler struct {
 	cartRepo     repositories.CartRepositoryImpl
 	cartItemRepo repositories.CartItemRepositoryImpl
 	cartSvc      services.CartService
+	orderRepo    repositories.OrderRepository
 }
 
 func NewAdminHandler(
@@ -44,6 +45,7 @@ func NewAdminHandler(
 	cartRepo repositories.CartRepositoryImpl,
 	cartItemRepo repositories.CartItemRepositoryImpl,
 	cartSvc services.CartService,
+	orderRepo repositories.OrderRepository,
 ) *AdminHandler {
 	return &AdminHandler{
 		render:       render,
@@ -55,6 +57,7 @@ func NewAdminHandler(
 		cartRepo:     cartRepo,
 		cartItemRepo: cartItemRepo,
 		cartSvc:      cartSvc,
+		orderRepo:    orderRepo,
 	}
 }
 

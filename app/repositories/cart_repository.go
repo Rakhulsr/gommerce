@@ -27,6 +27,8 @@ type CartRepositoryImpl interface {
 	GetAllCarts(ctx context.Context) ([]models.Cart, error)
 	AddCart(ctx context.Context, cart *models.Cart) (*models.Cart, error)
 	GetByUserIDWithItems(ctx context.Context, userID string) (*models.Cart, error)
+	UpdateCartTotalPrice(ctx context.Context, tx *gorm.DB, cartID string, baseTotalPrice, taxAmount, taxPercent, discountAmount, discountPercent decimal.Decimal, totalItems int) error
+	ResetCartTotals(ctx context.Context, tx *gorm.DB, cartID string) error
 }
 
 type cartRepository struct {
@@ -60,7 +62,7 @@ func (r *cartRepository) GetByID(ctx context.Context, id string) (*models.Cart, 
 	var cart models.Cart
 	err := r.db.WithContext(ctx).First(&cart, "id = ?", id).Error
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
 		return nil, err
@@ -98,6 +100,44 @@ func (r *cartRepository) UpdateCartSummary(ctx context.Context, cartID string) e
 	}
 	log.Printf("UpdateCartSummary: Ringkasan keranjang untuk ID %s berhasil diperbarui. TotalItems: %d", cartID, cart.TotalItems)
 	return nil
+}
+func (r *cartRepository) UpdateCartTotalPrice(ctx context.Context, tx *gorm.DB, cartID string, baseTotalPrice, taxAmount, taxPercent, discountAmount, discountPercent decimal.Decimal, totalItems int) error {
+	// Hitung GrandTotal dari parameter yang diberikan
+	grandTotal := baseTotalPrice.Add(taxAmount).Sub(discountAmount)
+
+	return tx.WithContext(ctx).Model(&models.Cart{}).Where("id = ?", cartID).Updates(map[string]interface{}{
+		"base_total_price":      baseTotalPrice,
+		"tax_amount":            taxAmount,
+		"tax_percent":           taxPercent,
+		"discount_amount":       discountAmount,
+		"discount_percent":      discountPercent,
+		"grand_total":           grandTotal, // Dihitung dari parameter yang diberikan
+		"total_items":           totalItems,
+		"shipping_cost":         decimal.Zero, // Diasumsikan reset/tidak relevan untuk update ini
+		"shipping_service":      "",
+		"shipping_service_code": "",
+		"shipping_service_name": "",
+		"updated_at":            time.Now(),
+	}).Error
+}
+
+// PERBAIKAN: Implementasi metode ResetCartTotals
+func (r *cartRepository) ResetCartTotals(ctx context.Context, tx *gorm.DB, cartID string) error {
+	return tx.WithContext(ctx).Model(&models.Cart{}).Where("id = ?", cartID).Updates(map[string]interface{}{
+		"base_total_price":      decimal.Zero,
+		"tax_amount":            decimal.Zero,
+		"tax_percent":           decimal.Zero, // Atau sesuaikan dengan nilai default tax Anda
+		"discount_amount":       decimal.Zero,
+		"discount_percent":      decimal.Zero, // Atau sesuaikan dengan nilai default discount Anda
+		"shipping_cost":         decimal.Zero,
+		"grand_total":           decimal.Zero,
+		"total_weight":          decimal.Zero,
+		"total_items":           0,
+		"shipping_service":      "", // Reset juga service pengiriman
+		"shipping_service_code": "",
+		"shipping_service_name": "",
+		"updated_at":            time.Now(),
+	}).Error
 }
 
 func (r *cartRepository) DeleteCart(ctx context.Context, tx *gorm.DB, cartID string) error {
@@ -200,7 +240,7 @@ func (r *cartRepository) GetOrCreateCartByUserID(ctx context.Context, cartID, us
 			return nil, fmt.Errorf("gagal membuat keranjang baru: %w", createErr)
 		}
 		cart = createdCart
-		log.Printf("CartRepository: Keranjang baru dibuat untuk UserID: %s, ID: %s", userID, cart.ID)
+		log.Printf("CartRepository: Keranjang baru dibuat untuk UserID: %s, ID: %s", newCart.ID, userID)
 	}
 
 	return cart, nil
@@ -221,7 +261,8 @@ func (r *cartRepository) GetCartByUserID(ctx context.Context, userID string) (*m
 func (r *cartRepository) GetByUserIDWithItems(ctx context.Context, userID string) (*models.Cart, error) {
 	var cart models.Cart
 	if err := r.db.WithContext(ctx).
-		Preload("CartItems.Product"). // Preload Product related to CartItem
+		Preload("CartItems.Product.ProductImages").
+		Preload("CartItems.Product").
 		Where("user_id = ?", userID).
 		First(&cart).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {

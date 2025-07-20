@@ -3,6 +3,7 @@ package repositories
 import (
 	"context"
 	"fmt"
+	"log"
 
 	"github.com/Rakhulsr/go-ecommerce/app/models"
 	"gorm.io/gorm"
@@ -21,6 +22,7 @@ type CartItemRepositoryImpl interface {
 	GetCartAndProduct(ctx context.Context, cartID, productID string) (*models.CartItem, error)
 	ClearCartItems(ctx context.Context, tx *gorm.DB, cartID string) error
 	GetByCartIDAndProductID(ctx context.Context, cartID, productID string) (*models.CartItem, error)
+	DeleteAllItemsByCartID(ctx context.Context, tx *gorm.DB, cartID string) error
 }
 
 func NewCartItemRepository(db *gorm.DB) CartItemRepositoryImpl {
@@ -35,8 +37,8 @@ func (r *CartItemRepository) Update(ctx context.Context, item *models.CartItem) 
 	return r.DB.WithContext(ctx).Save(item).Error
 }
 
-func (r *CartItemRepository) Delete(ctx context.Context, cartItemID string) error { // <-- PERUBAHAN DI SINI
-	// Menghapus berdasarkan primary key ID
+func (r *CartItemRepository) Delete(ctx context.Context, cartItemID string) error {
+
 	return r.DB.WithContext(ctx).Delete(&models.CartItem{}, "id = ?", cartItemID).Error
 }
 
@@ -68,7 +70,7 @@ func (r *CartItemRepository) GetCartAndProduct(ctx context.Context, cartID, prod
 }
 
 func (r *CartItemRepository) ClearCartItems(ctx context.Context, tx *gorm.DB, cartID string) error {
-	// Gunakan objek transaksi (tx) yang diberikan untuk operasi database
+
 	return tx.WithContext(ctx).Where("cart_id = ?", cartID).Delete(&models.CartItem{}).Error
 }
 
@@ -81,4 +83,19 @@ func (r *CartItemRepository) GetByCartIDAndProductID(ctx context.Context, cartID
 		return nil, fmt.Errorf("failed to get cart item by cart ID and product ID: %w", err)
 	}
 	return &cartItem, nil
+}
+
+func (r *CartItemRepository) DeleteAllItemsByCartID(ctx context.Context, tx *gorm.DB, cartID string) error {
+	dbInstance := r.DB
+	if tx != nil {
+		dbInstance = tx
+	}
+
+	result := dbInstance.WithContext(ctx).Where("cart_id = ?", cartID).Delete(&models.CartItem{})
+	if result.Error != nil {
+		log.Printf("ERROR: Failed to delete cart items for CartID %s: %v", cartID, result.Error)
+		return fmt.Errorf("failed to delete cart items: %w", result.Error)
+	}
+	log.Printf("DEBUG: %d cart items deleted for CartID %s", result.RowsAffected, cartID)
+	return nil
 }

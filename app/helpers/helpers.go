@@ -1,11 +1,13 @@
 package helpers
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"html/template"
 	"log"
 	"net/http"
 	"net/url"
@@ -35,15 +37,39 @@ const (
 	ContextKeyUserRole   contextKey = "userRole"
 )
 
+func GetTemplateFunctions() template.FuncMap {
+	return template.FuncMap{
+		"formatCurrency":     FormatCurrency,
+		"add":                Add,
+		"sub":                Sub,
+		"mul":                Mul,
+		"div":                Div,
+		"mod":                Mod,
+		"eq":                 Eq,
+		"ne":                 Ne,
+		"lt":                 Lt,
+		"le":                 Le,
+		"gt":                 Gt,
+		"ge":                 Ge,
+		"urlQueryEscape":     URLQueryEscape,
+		"extractProvince":    ExtractProvinceFromLocationName,
+		"extractCity":        ExtractCityFromLocationName,
+		"extractDistrict":    ExtractDistrictFromLocationName,
+		"extractSubdistrict": ExtractSubdistrictFromLocationName,
+		"orderStatusText":    OrderStatusText,
+		"paymentStatusText":  PaymentStatusText,
+	}
+}
+
 func ClearCartIDFromSession(w http.ResponseWriter, r *http.Request, sessionStore sessions.SessionStore) {
-	session, err := sessionStore.GetSession(w, r) // Memanggil metode GetSession dari instance SessionStore
+	session, err := sessionStore.GetSession(w, r)
 	if err != nil {
 		log.Printf("Error getting session to clear cart ID: %v", err)
 		return
 	}
-	// Hapus nilai cartID dari sesi
+
 	delete(session.Values, string(ContextKeyCartID))
-	// Atur MaxAge ke -1 untuk menghapus cookie sesi secara efektif
+
 	session.Options.MaxAge = -1
 	err = session.Save(r, w)
 	if err != nil {
@@ -327,4 +353,80 @@ func PopulateBaseData(pageData *other.BasePageData, baseDataMap map[string]inter
 	if isAdminPage, ok := baseDataMap["IsAdminPage"].(bool); ok {
 		pageData.IsAdminPage = isAdminPage
 	}
+}
+
+func GetUserIDFromContext(ctx context.Context) string {
+	userID, ok := ctx.Value(ContextKeyUserID).(string)
+	if !ok {
+		return ""
+	}
+	return userID
+}
+
+func SetUserIDToContext(ctx context.Context, userID string) context.Context {
+	return context.WithValue(ctx, ContextKeyUserID, userID)
+}
+
+func OrderStatusText(status int) string {
+	switch status {
+	case models.OrderStatusPending:
+		return "Menunggu Pembayaran"
+	case models.OrderStatusProcessing:
+		return "Sedang Diproses"
+	case models.OrderStatusShipped:
+		return "Dalam Pengiriman"
+	case models.OrderStatusCompleted:
+		return "Selesai"
+	case models.OrderStatusCancelled:
+		return "Dibatalkan"
+	case models.OrderStatusRefunded:
+		return "Pengembalian Dana"
+	case models.OrderStatusFailed:
+		return "Gagal"
+	default:
+		return "Status Tidak Diketahui"
+	}
+}
+
+func PaymentStatusText(status string) string {
+	switch status {
+	case "Paid":
+		return "Lunas"
+	case "Pending":
+		return "Menunggu Pembayaran"
+	case "Failed":
+		return "Gagal"
+	case "Cancelled":
+		return "Dibatalkan"
+	case "Refunded":
+		return "Dikembalikan"
+	case "settlement":
+		return "Lunas"
+	case "capture":
+		return "Lunas"
+	case "deny":
+		return "Ditolak"
+	case "expire":
+		return "Kadaluarsa"
+	case "challenge":
+		return "Challenge"
+	default:
+		return "Tidak Diketahui"
+	}
+}
+
+type AdminProductFormPageData struct {
+	other.BasePageData
+	ProductData models.Product
+	Categories  []models.Category
+	IsEdit      bool
+	FormAction  string
+	Errors      map[string]string
+}
+
+type AdminOrderPageData struct {
+	other.BasePageData
+	Orders []models.Order
+
+	OrderStatusOptions map[int]string
 }

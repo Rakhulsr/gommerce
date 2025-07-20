@@ -54,7 +54,7 @@ func New() *render.Render {
 					return d.GreaterThan(decimal.Zero) // Membandingkan dengan decimal.Zero di Go
 				},
 			},
-			helpers.FuncMap,
+			helpers.GetTemplateFunctions(),
 		},
 	})
 

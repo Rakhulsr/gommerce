@@ -22,27 +22,25 @@
     {{ end }}
 
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 lg:gap-12">
-        <!-- Ringkasan Produk -->
         <div class="lg:col-span-2 bg-white shadow-xl rounded-lg p-6 border border-gray-100">
             <h2 class="text-2xl font-bold text-gray-800 mb-5 border-b pb-3 border-gray-200">Daftar Produk</h2>
             <div class="space-y-6 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
                 {{ if .Cart.CartItems }}
                 {{ range .Cart.CartItems }}
                 <div class="flex flex-col sm:flex-row items-center sm:items-start justify-between border-b border-gray-200 pb-6 last:border-b-0 last:pb-0 pt-4 animate-fade-in-up">
-                    <div class="flex-shrink-0 mr-0 sm:mr-6 mb-4 sm:mb-0">
-                        {{ if gt (len .Product.ProductImages) 0 }}
-                        <img src="{{ (index .Product.ProductImages 0).Small }}" alt="{{ .Product.Name }}" class="w-28 h-28 object-cover rounded-lg shadow-md border border-gray-100">
-                        {{ else }}
-                        <img src="/images/placeholder.jpg" alt="No Image" class="w-28 h-28 object-cover rounded-lg shadow-md border border-gray-100">
-                        {{ end }}
-                    </div>
+                     <div class="flex-shrink-0 mr-0 sm:mr-6 mb-4 sm:mb-0">
+                            {{ $imageURL := "https://placehold.co/112x112/E0E0E0/333333?text=No+Image" }}
+                            {{ if gt (len .Product.ProductImages) 0 }}
+                                {{ $imageURL = (index .Product.ProductImages 0).Path }} 
+                            {{ end }}
+                            <img src="{{ $imageURL }}" alt="{{ .Product.Name }}" class="w-28 h-28 object-cover rounded-lg shadow-md border border-gray-100">
+                        </div>
                     <div class="flex-1 text-center sm:text-left mb-4 sm:mb-0">
                         <p class="font-semibold text-xl text-gray-800 mb-1">{{ .Product.Name }}</p>
                         <p class="text-sm text-gray-600">Jumlah: {{ .Qty }}</p>
-                        <p class="text-sm text-gray-600">Harga Satuan: {{ rupiah .BasePrice }}</p>
                     </div>
                     <div class="text-right">
-                        <p class="font-bold text-lg text-gray-900">{{ rupiah .SubTotal }}</p>
+                        <p class="font-bold text-lg text-gray-900">{{ rupiah .Subtotal }}</p>
                     </div>
                 </div>
                 {{ end }}
@@ -52,7 +50,6 @@
             </div>
         </div>
 
-        <!-- Detail Pengiriman & Pembayaran -->
         <div class="bg-white shadow-xl rounded-lg p-6 border border-gray-100 h-fit">
             <h2 class="text-2xl font-bold text-gray-800 mb-5 border-b pb-3 border-gray-200">Detail Pesanan</h2>
             <div class="space-y-3 mb-6">
@@ -65,7 +62,7 @@
                     <span class="text-emerald-500 font-semibold">-{{ rupiah .Cart.DiscountAmount }}</span>
                 </div>
                 <div class="flex justify-between items-center text-lg text-gray-700">
-                    <span>Pajak ({{ .Cart.TaxPercent }}%)</span>
+                    <span>Pajak ({{ .Cart.TaxPercent.StringFixed 2 }}%)</span>
                     <span class="text-red-600 font-semibold">+{{ rupiah .Cart.TaxAmount }}</span>
                 </div>
                 <div class="flex justify-between items-center text-lg text-gray-700">
@@ -80,12 +77,12 @@
             </div>
 
             <h3 class="text-xl font-bold text-gray-800 mb-4 border-b pb-2 border-gray-200">Alamat Pengiriman</h3>
-            {{ with .Address }}
+            {{ with .SelectedAddress }}
             <div class="text-gray-700 text-base space-y-1 mb-6">
                 <p><strong>{{ .Name }}</strong></p>
                 <p>{{ .Address1 }}</p>
                 {{ if .Address2 }}<p>{{ .Address2 }}</p>{{ end }}
-                <p>{{ .CityName }}, {{ .ProvinceName }} {{ .PostCode }}</p> {{/* KOREKSI: Gunakan .CityName dan .ProvinceName langsung dari Address */}}
+                <p>{{ .LocationName }}, {{ .PostCode }}</p>
                 <p>Telepon: {{ .Phone }}</p>
                 <p>Email: {{ .Email }}</p>
             </div>
@@ -93,7 +90,13 @@
             <p class="text-red-500 text-base mb-6">Alamat pengiriman tidak ditemukan.</p>
             {{ end }}
 
-            <!-- Tombol Pembayaran Midtrans -->
+            <!-- Hidden inputs untuk data yang akan dikirim ke JavaScript -->
+            <input type="hidden" id="checkout_address_id_js" value="{{ if .SelectedAddress }}{{ .SelectedAddress.ID }}{{ end }}">
+            <input type="hidden" id="checkout_shipping_cost_js" value="{{ .ShippingCost.InexactFloat64 }}">
+            <input type="hidden" id="checkout_shipping_service_code_js" value="{{ .ShippingServiceCode }}">
+            <input type="hidden" id="checkout_shipping_service_name_js" value="{{ .ShippingServiceName }}">
+            <input type="hidden" id="checkout_final_total_price_js" value="{{ .FinalTotalPrice.InexactFloat64 }}">
+
             <button id="pay-button" class="w-full mt-4 bg-emerald-600 text-white py-3 px-4 rounded-lg hover:bg-emerald-700 text-lg font-semibold shadow-md transition duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2">
                 Bayar Sekarang dengan Midtrans
             </button>
@@ -102,7 +105,6 @@
 </div>
 
 <style>
-    /* Animations */
     @keyframes fadeIn {
         from { opacity: 0; }
         to { opacity: 1; }
@@ -140,7 +142,7 @@
         animation: fadeOut 0.5s ease-out forwards;
     }
 
-    /* Custom Scrollbar for product list */
+
     .custom-scrollbar::-webkit-scrollbar {
         width: 8px;
     }
@@ -160,14 +162,9 @@
     }
 </style>
 
-<!-- Hapus atau komentar baris ini karena kita akan melakukan redirect langsung -->
-<!-- <script type="text/javascript"
-    src="https://app.sandbox.midtrans.com/snap/snap.js"
-    data-client-key="{{ .MidtransClientKey }}"></script> -->
-
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-        // Flash message dismissal
+        
         const flashMessage = document.getElementById('flash-message');
         if (flashMessage) {
             setTimeout(() => {
@@ -178,32 +175,42 @@
             }, 5000);
         }
 
-        // Midtrans integration
         const payButton = document.getElementById('pay-button');
         if (payButton) {
             payButton.addEventListener('click', function() {
-                // Dapatkan data yang diperlukan dari template Go
-                const orderID = "{{ .Order.OrderCode }}"; // Menggunakan Order.OrderCode
-                const finalTotalPrice = `{{ .FinalTotalPrice }}`
+                // Ambil nilai dari hidden inputs
+                const addressID = document.getElementById('checkout_address_id_js').value;
+                const shippingCost = parseFloat(document.getElementById('checkout_shipping_cost_js').value);
+                const shippingServiceCode = document.getElementById('checkout_shipping_service_code_js').value;
+                const shippingServiceName = document.getElementById('checkout_shipping_service_name_js').value;
+                const finalTotalPrice = parseFloat(document.getElementById('checkout_final_total_price_js').value);
+
+                // Validasi sederhana di frontend sebelum mengirim
+                if (!addressID || isNaN(shippingCost) || !shippingServiceCode || !shippingServiceName || isNaN(finalTotalPrice) || finalTotalPrice <= 0) {
+                    Swal.fire('Error', 'Data pembayaran tidak lengkap atau tidak valid. Mohon kembali ke keranjang dan lengkapi informasi pengiriman.', 'error');
+                    return;
+                }
 
                 Swal.fire({
                     title: 'Memproses Pembayaran...',
-                    text: 'Mohon tunggu sebentar. Anda akan diarahkan ke halaman pembayaran Midtrans.', // Pesan diperbarui
+                    text: 'Mohon tunggu sebentar. Anda akan diarahkan ke halaman pembayaran Midtrans.', 
                     allowOutsideClick: false,
                     didOpen: () => {
                         Swal.showLoading();
                     }
                 });
 
-                // Panggil endpoint backend yang menginisiasi transaksi Midtrans
                 fetch('/checkout/initiate-midtrans', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify({
-                        order_id: orderID,
-                        gross_amount: parseFloat(finalTotalPrice), // Pastikan ini dikirim sebagai angka
+                        address_id: addressID,
+                        shipping_cost: shippingCost,
+                        shipping_service_code: shippingServiceCode,
+                        shipping_service_name: shippingServiceName,
+                        gross_amount: finalTotalPrice,
                     })
                 })
                 .then(response => {
@@ -215,7 +222,6 @@
                 .then(data => {
                     Swal.close(); // Tutup loading SweetAlert
                     if (data.token) { // data.token dari backend sebenarnya adalah redirect_url
-                        // Lakukan redireksi langsung ke URL pembayaran Midtrans
                         window.location.href = data.token;
                     } else {
                         Swal.fire('Error', 'Gagal mendapatkan URL pembayaran dari Midtrans.', 'error');

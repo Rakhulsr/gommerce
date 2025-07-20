@@ -3,7 +3,7 @@
 <div class="flex min-h-screen bg-gray-100">
     {{ template "admin_sidebar" . }}
 
-    <div class="flex-1 px-6 py-8">
+    <div class="flex-1 px-6 py-8 min-w-0"> {# Pastikan min-w-0 ada di sini #}
         <h1 class="text-3xl font-bold text-gray-800 mb-6">Dashboard Admin</h1>
 
         {{ if .Message }}
@@ -36,7 +36,6 @@
             </div>
         </div>
 
-    
         <div class="bg-blue-50 rounded-lg shadow-sm p-6 mb-8">
             <h3 class="text-xl font-semibold text-gray-800 mb-4">Diskon Global</h3>
             <p class="text-gray-700 mb-4">Diskon global saat ini: <span class="font-bold text-lg text-blue-600">{{ .CurrentGlobalDiscount }}</span></p>
@@ -54,10 +53,9 @@
             </form>
         </div>
       
-
         <div class="bg-blue-50 rounded-lg shadow-sm p-6 mb-8">
             <h3 class="text-xl font-semibold text-gray-800 mb-4">Pesanan Terbaru</h3>
-            <div class="overflow-x-auto">
+            <div class="overflow-x-auto overflow-y-auto max-h-[540px]"> {# PERBAIKAN: Menambahkan overflow-y dan max-h #}
                 <table class="min-w-full divide-y divide-gray-200">
                     <thead class="bg-blue-100"> 
                         <tr>
@@ -99,18 +97,20 @@
 
         <div class="bg-blue-50 rounded-lg shadow-sm p-6">
             <h3 class="text-xl font-semibold text-gray-800 mb-4">Aktivitas Terbaru</h3>
-            <ul class="divide-y divide-gray-200">
-                {{ if .RecentActivities }}
-                    {{ range .RecentActivities }}
-                    <li class="py-3 flex justify-between items-center">
-                        <p class="text-sm text-gray-700">{{ .Activity }}</p>
-                        <span class="text-xs text-gray-500">{{ .Time.Format "02 Jan 2006 15:04" }}</span>
-                    </li>
+            <div class="overflow-x-auto overflow-y-auto max-h-[420px]"> {# PERBAIKAN: Menambahkan overflow-y dan max-h #}
+                <ul class="divide-y divide-gray-200">
+                    {{ if .RecentActivities }}
+                        {{ range .RecentActivities }}
+                        <li class="py-3 flex justify-between items-center">
+                            <p class="text-sm text-gray-700">{{ .Activity }}</p>
+                            <span class="text-xs text-gray-500">{{ .Time.Format "02 Jan 2006 15:04" }}</span>
+                        </li>
+                        {{ end }}
+                    {{ else }}
+                        <li class="py-3 text-sm text-gray-500 text-center">Tidak ada aktivitas terbaru.</li>
                     {{ end }}
-                {{ else }}
-                    <li class="py-3 text-sm text-gray-500 text-center">Tidak ada aktivitas terbaru.</li>
-                {{ end }}
-            </ul>
+                </ul>
+            </div>
         </div>
     </div>
 </div>

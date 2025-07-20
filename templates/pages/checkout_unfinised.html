@@ -1,0 +1,89 @@
+{{ define "checkout/unfinish" }}
+
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" integrity="sha512-Fo3rlrojV1WpM6Z8+7f7mB6x9zG+6Xm5t3+E4nJg7v9z8j3L8bJvR2y5A+5w5P5/t5u6Q7s6+7P3/w5v5Q7s6Q7s6/g==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <style>
+        /* Animasi kustom dari template checkout/process Anda */
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes fadeOut {
+            from { opacity: 1; }
+            to { opacity: 0; }
+        }
+
+        .animate-fade-in {
+            animation: fadeIn 0.5s ease-out forwards;
+        }
+
+        .animate-fade-in-up {
+            animation: fadeInUp 0.5s ease-out forwards;
+        }
+
+        .animate-fade-in-down {
+            animation: fadeIn 0.5s ease-out forwards;
+        }
+
+        .animate-fade-out {
+            animation: fadeOut 0.5s ease-out forwards;
+        }
+
+        /* Styling kustom untuk ikon error */
+        .text-error-icon {
+            color: #ef4444; /* Warna merah sesuai Tailwind red-500 */
+        }
+    </style>
+</head>
+<body class="bg-gray-100 flex items-center justify-center min-h-screen">
+    <div class="max-w-2xl mx-auto py-8 px-4 sm:px-6 lg:px-8 w-full">
+        <div class="bg-white shadow-xl rounded-lg p-8 border border-gray-100 text-center animate-fade-in">
+            <div class="flex justify-center mb-6">
+                <svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" fill="currentColor" class="bi bi-x-circle-fill text-error-icon" viewBox="0 0 16 16">
+                    <path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zM5.354 4.646a.5.5 0 1 0-.708.708L7.293 8l-2.647 2.646a.5.5 0 0 0 .708.708L8 8.707l2.646 2.647a.5.5 0 0 0 .708-.708L8.707 8l2.647-2.646a.5.5 0 0 0-.708-.708L8 7.293 5.354 4.646z"/>
+                </svg>
+            </div>
+            
+            <h1 class="text-3xl font-extrabold text-gray-900 mb-4">{{ .Title }}</h1>
+            <p class="text-lg text-gray-700 mb-8 leading-relaxed">{{ .Message }}</p>
+
+            <div class="mt-6 flex flex-col sm:flex-row justify-center gap-4">
+                <a href="/carts" class="inline-flex items-center justify-center px-6 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition duration-200">
+                    <i class="fas fa-shopping-cart mr-2"></i> Kembali ke Keranjang
+                </a>
+                {{ if .OrderID }}
+                <a href="/orders/{{ .OrderID }}" class="inline-flex items-center justify-center px-6 py-3 border border-gray-300 text-base font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition duration-200">
+                    <i class="fas fa-info-circle mr-2"></i> Lihat Detail Pesanan
+                </a>
+                {{ end }}
+                </div>
+        </div>
+    </div>
+
+    <script>
+        // Logika flash message yang serupa dengan template checkout/process
+        document.addEventListener('DOMContentLoaded', function() {
+            const flashMessage = document.getElementById('flash-message');
+            if (flashMessage) {
+                setTimeout(() => {
+                    flashMessage.classList.add('animate-fade-out');
+                    flashMessage.addEventListener('animationend', () => {
+                        flashMessage.remove();
+                    });
+                }, 5000); // Pesan akan hilang setelah 5 detik
+            }
+        });
+    </script>
+
+{{ end }}

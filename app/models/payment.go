@@ -3,13 +3,14 @@ package models
 import (
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 )
 
 type Payment struct {
-	ID          string `gorm:"size:36;not null;uniqueIndex;primary_key"`
-	Order       Order
+	ID          string          `gorm:"size:36;not null;uniqueIndex;primary_key"`
+	Order       Order           `gorm:"foreignKey:OrderID"`
 	OrderID     string          `gorm:"size:36;index"`
 	Number      string          `gorm:"size:100;index"`
 	Amount      decimal.Decimal `gorm:"type:decimal(16,2)"`
@@ -24,4 +25,11 @@ type Payment struct {
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 	DeletedAt   gorm.DeletedAt
+}
+
+func (p *Payment) BeforeCreate(tx *gorm.DB) (err error) {
+	if p.ID == "" {
+		p.ID = uuid.New().String()
+	}
+	return
 }

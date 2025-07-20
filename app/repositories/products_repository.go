@@ -30,6 +30,8 @@ type ProductRepositoryImpl interface {
 	UpdateProductDiscount(ctx context.Context, productID string, discountPercent decimal.Decimal, discountAmount decimal.Decimal) error
 	IsSKUExists(ctx context.Context, sku string) (bool, error)
 	DecrementStock(ctx context.Context, tx *gorm.DB, productID string, quantity int) error
+	UpdateProductTx(ctx context.Context, tx *gorm.DB, product *models.Product) error
+	UpdateStock(ctx context.Context, tx *gorm.DB, productID string, newStock int) error
 }
 
 type productRepository struct {
@@ -176,7 +178,7 @@ func (p *productRepository) SearchProductsPaginated(ctx context.Context, keyword
 
 	if err := p.db.WithContext(ctx).
 		Model(&models.Product{}).
-		Where("LOWER(name) LIKE ? OR LOWER(short_description) LIKE ?", searchKeyword, searchKeyword).
+		Where("LOWER(name) LIKE ?", searchKeyword).
 		Count(&total).Error; err != nil {
 		log.Printf("ProductRepository.SearchProductsPaginated: Error counting search results for keyword '%s': %v", keyword, err)
 		return nil, 0, err
@@ -185,7 +187,7 @@ func (p *productRepository) SearchProductsPaginated(ctx context.Context, keyword
 	err := p.db.WithContext(ctx).
 		Preload("ProductImages").
 		Preload("Categories").
-		Where("LOWER(name) LIKE ? OR LOWER(short_description) LIKE ?", searchKeyword, searchKeyword).
+		Where("LOWER(name) LIKE ?", searchKeyword).
 		Order("created_at DESC").
 		Limit(limit).
 		Offset(offset).
@@ -338,7 +340,7 @@ func (p *productRepository) IsSKUExists(ctx context.Context, sku string) (bool, 
 }
 
 func (r *productRepository) DecrementStock(ctx context.Context, tx *gorm.DB, productID string, quantity int) error {
-	// Gunakan objek transaksi (tx) yang diberikan
+
 	result := tx.WithContext(ctx).Model(&models.Product{}).Where("id = ?", productID).
 		Update("stock", gorm.Expr("stock - ?", quantity))
 	if result.Error != nil {
@@ -348,4 +350,12 @@ func (r *productRepository) DecrementStock(ctx context.Context, tx *gorm.DB, pro
 		return fmt.Errorf("no product found with ID %s to decrement stock", productID)
 	}
 	return nil
+}
+
+func (r *productRepository) UpdateProductTx(ctx context.Context, tx *gorm.DB, product *models.Product) error {
+	return tx.WithContext(ctx).Save(product).Error
+}
+
+func (r *productRepository) UpdateStock(ctx context.Context, tx *gorm.DB, productID string, newStock int) error {
+	return tx.WithContext(ctx).Model(&models.Product{}).Where("id = ?", productID).Update("stock", newStock).Error
 }

@@ -33,4 +33,8 @@ type BasePageData struct {
 	HideAdminWelcomeMessage bool
 	CurrentPath             string
 	IsAdminRoute            bool
+	OrderID                 string
+	Order                   *models.Order
+	Orders                  []models.Order
+	Payment                 *models.Payment
 }

@@ -3,6 +3,7 @@ package models
 import (
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 )
@@ -18,13 +19,12 @@ const (
 )
 
 type Order struct {
-	ID                   string        `gorm:"size:36;not null;uniqueIndex;primary_key"`
-	UserID               string        `gorm:"size:36;index"`
-	User                 User          `gorm:"foreignKey:UserID"`
-	OrderCode            string        `gorm:"type:varchar(255);unique;not null" json:"order_code"`
-	OrderDate            time.Time     `gorm:"not null" json:"order_date"`
-	OrderCustomerID      string        `gorm:"size:36;index"`
-	OrderCustomer        OrderCustomer `gorm:"foreignKey:OrderCustomerID"`
+	ID        string    `gorm:"size:36;not null;uniqueIndex;primary_key"`
+	UserID    string    `gorm:"size:36;index"`
+	User      User      `gorm:"foreignKey:UserID"`
+	OrderCode string    `gorm:"type:varchar(255);unique;not null" json:"order_code"`
+	OrderDate time.Time `gorm:"not null" json:"order_date"`
+
 	OrderItems           []OrderItem
 	BaseTotalPrice       decimal.Decimal `gorm:"type:decimal(16,2);"`
 	TaxAmount            decimal.Decimal `gorm:"type:decimal(16,2);"`
@@ -45,9 +45,17 @@ type Order struct {
 	MidtransTransactionID string `gorm:"size:255;index"`
 	MidtransPaymentURL    string `gorm:"type:text"`
 	PaymentStatus         string `gorm:"size:100"`
-	Status                int    `gorm:"default:1"`
+
+	Status int `gorm:"default:1"`
 
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
+}
+
+func (o *Order) BeforeCreate(tx *gorm.DB) (err error) {
+	if o.ID == "" {
+		o.ID = uuid.New().String()
+	}
+	return
 }

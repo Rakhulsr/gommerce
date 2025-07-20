@@ -2,30 +2,9 @@ package helpers
 
 import (
 	"fmt"
-	"html/template"
 	"net/url"
 	"strings"
 )
-
-var FuncMap = template.FuncMap{
-	"formatCurrency":     FormatCurrency,
-	"add":                Add,
-	"sub":                Sub,
-	"mul":                Mul,
-	"div":                Div,
-	"mod":                Mod,
-	"eq":                 Eq,
-	"ne":                 Ne,
-	"lt":                 Lt,
-	"le":                 Le,
-	"gt":                 Gt,
-	"ge":                 Ge,
-	"urlQueryEscape":     URLQueryEscape,
-	"extractProvince":    ExtractProvinceFromLocationName,
-	"extractCity":        ExtractCityFromLocationName,
-	"extractDistrict":    ExtractDistrictFromLocationName,
-	"extractSubdistrict": ExtractSubdistrictFromLocationName,
-}
 
 func FormatCurrency(amount float64) string {
 	return fmt.Sprintf("Rp %.2f", amount)

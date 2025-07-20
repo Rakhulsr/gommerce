@@ -13,9 +13,8 @@ import (
 	"github.com/Rakhulsr/go-ecommerce/app/services"
 	"github.com/Rakhulsr/go-ecommerce/app/utils/renderer"
 	"github.com/Rakhulsr/go-ecommerce/app/utils/sessions"
-	"github.com/gorilla/mux"
-
 	"github.com/go-playground/validator/v10"
+	"github.com/gorilla/mux"
 	"gorm.io/gorm"
 )
 
@@ -41,6 +40,7 @@ func NewRouter(db *gorm.DB) *mux.Router {
 	orderRepo := repositories.NewOrderRepository(db)
 	orderItemRepo := repositories.NewOrderItemRepository(db)
 	orderCustomerRepo := repositories.NewOrderCustomerRepository(db)
+	paymentRepo := repositories.NewPaymentRepository(db)
 
 	cartSvc := services.NewCartService(cartRepo, cartItemRepo, productRepo, db)
 	komerceShippingSvc := services.NewKomerceRajaOngkirClient(env.API_ONGKIR_KEY_KOMERCE)
@@ -55,20 +55,19 @@ func NewRouter(db *gorm.DB) *mux.Router {
 	}
 	mailer := services.NewMailer(emailConfig)
 	validate := validator.New()
-	checkoutSvc := services.NewCheckoutService(db, cartRepo, cartItemRepo, productRepo, userRepo, addressRepo, orderRepo, orderItemRepo, orderCustomerRepo)
 
+	checkoutSvc := services.NewCheckoutService(db, cartRepo, cartItemRepo, productRepo, userRepo, addressRepo, orderRepo, orderItemRepo, orderCustomerRepo, paymentRepo)
+	paymentSvc := services.NewPaymentService(orderRepo, paymentRepo, db)
 	originID, _ := strconv.Atoi(env.API_ONGKIR_ORIGIN)
 
 	productHandler := handlers.NewProductHandler(productRepo, categoryRepo, render)
 	homeHandler := handlers.NewHomeHandler(render, categoryRepo, productRepo)
 	komerceCartHandler := handlers.NewKomerceCartHandler(productRepo, cartRepo, render, cartItemRepo, komerceShippingSvc, userRepo, addressRepo, cartSvc, originID)
-
 	authHandler := handlers.NewAuthHandler(render, userRepo, cartRepo, sessionStore, mailer, validate)
-	// Inisialisasi KomerceAddressHandler tanpa locationRepo
 	komerceAddressHandler := handlers.NewKomerceAddressHandler(render, addressRepo, userRepo, komerceShippingSvc, validate)
-
-	adminHandler := admin.NewAdminHandler(render, validate, productRepo, categoryRepo, sectionRepo, userRepo, cartRepo, cartItemRepo, *cartSvc)
-	komerceCheckoutHandler := handlers.NewKomerceCheckoutHandler(render, validate, checkoutSvc, cartRepo, userRepo, orderRepo, productRepo, db, komerceShippingSvc, addressRepo, sessionStore)
+	adminHandler := admin.NewAdminHandler(render, validate, productRepo, categoryRepo, sectionRepo, userRepo, cartRepo, cartItemRepo, *cartSvc, orderRepo)
+	komerceCheckoutHandler := handlers.NewKomerceCheckoutHandler(render, validate, checkoutSvc, cartRepo, userRepo, orderRepo, productRepo, db, komerceShippingSvc, addressRepo, sessionStore, *paymentSvc, cartItemRepo)
+	orderHandler := handlers.NewOrderHandler(render, orderRepo, userRepo, paymentRepo)
 
 	router.PathPrefix("/css/").Handler(http.StripPrefix("/css/", http.FileServer(http.Dir("assets/css"))))
 	router.PathPrefix("/js/").Handler(http.StripPrefix("/js/", http.FileServer(http.Dir("assets/js"))))
@@ -107,16 +106,7 @@ func NewRouter(db *gorm.DB) *mux.Router {
 	apiKomerceRouter := router.PathPrefix("/api/komerce").Subrouter()
 	apiKomerceRouter.HandleFunc("/calculate-shipping-cost", komerceCartHandler.CalculateShippingCost).Methods("POST")
 
-	// --- PERUBAHAN KRUSIAL DI SINI ---
-	// Hapus routes lama untuk lokasi granular
-	// apiKomerceRouter.HandleFunc("/provinces", komerceAddressHandler.GetProvinces).Methods("GET")
-	// apiKomerceRouter.HandleFunc("/cities", komerceAddressHandler.GetCitiesByProvince).Methods("GET")
-	// apiKomerceRouter.HandleFunc("/districts", komerceAddressHandler.GetDistrictsByCity).Methods("GET")
-	// apiKomerceRouter.HandleFunc("/subdistricts", komerceAddressHandler.GetSubdistrictsByDistrict).Methods("GET")
-
-	// Tambahkan route baru untuk pencarian lokasi (autocomplete)
 	apiKomerceRouter.HandleFunc("/search-destinations", komerceAddressHandler.SearchDomesticDestinationsHandler).Methods("GET")
-	// --- AKHIR PERUBAHAN KRUSIAL ---
 
 	authenticated.HandleFunc("/profile", authHandler.ProfileHandler).Methods("GET")
 	authenticated.HandleFunc("/profile/edit", authHandler.UpdateProfilePost).Methods("POST", "PUT")
@@ -131,9 +121,20 @@ func NewRouter(db *gorm.DB) *mux.Router {
 	authenticated.HandleFunc("/addresses/delete/{id}", komerceAddressHandler.DeleteAddressPost).Methods("POST")
 	authenticated.HandleFunc("/addresses/set-primary/{id}", komerceAddressHandler.SetPrimaryAddressPost).Methods("POST")
 
+	authenticated.HandleFunc("/checkout/process", komerceCheckoutHandler.DisplayCheckoutConfirmation).Methods("POST")
+	authenticated.HandleFunc("/checkout/initiate-midtrans", komerceCheckoutHandler.InitiateMidtransTransactionPost).Methods("POST")
+	authenticated.HandleFunc("/checkout/finish", komerceCheckoutHandler.CheckoutFinishGet).Methods("GET")
+	authenticated.HandleFunc("/checkout/unfinish", komerceCheckoutHandler.CheckoutUnfinishGet).Methods("GET")
+	authenticated.HandleFunc("/checkout/error", komerceCheckoutHandler.CheckoutErrorGet).Methods("GET")
+
+	authenticated.HandleFunc("/orders", orderHandler.OrderListGet).Methods("GET")
+	authenticated.HandleFunc("/orders/{orderCode}", orderHandler.OrderDetailGet).Methods("GET")
+
+	router.HandleFunc("/midtrans-notification", komerceCheckoutHandler.MidtransNotificationPost).Methods("POST")
+
 	adminRouter := router.PathPrefix("/admin").Subrouter()
-	adminRouter.Use(middlewares.AuthRequiredMiddleware)
-	adminRouter.Use(middlewares.AdminAuthMiddleware(userRepo))
+	adminRouter.Use(mux.MiddlewareFunc(middlewares.AuthRequiredMiddleware))
+	adminRouter.Use(mux.MiddlewareFunc(middlewares.AdminAuthMiddleware(userRepo)))
 	adminRouter.HandleFunc("/dashboard/apply-discount", adminHandler.ApplyGlobalDiscountPost).Methods("POST")
 
 	adminRouter.HandleFunc("/dashboard", adminHandler.GetDashboard).Methods("GET")
@@ -158,16 +159,7 @@ func NewRouter(db *gorm.DB) *mux.Router {
 	adminRouter.HandleFunc("/users/edit/{id}", adminHandler.EditUserPost).Methods("POST", "PUT")
 	adminRouter.HandleFunc("/users/delete/{id}", adminHandler.DeleteUserPost).Methods("POST", "DELETE")
 
-	checkoutRouter := router.PathPrefix("/checkout").Subrouter()
-
-	checkoutRouter.HandleFunc("/process", komerceCheckoutHandler.DisplayCheckoutConfirmation).Methods("POST")
-	checkoutRouter.HandleFunc("/initiate-midtrans", komerceCheckoutHandler.InitiateMidtransTransactionPost).Methods("POST")
-
-	checkoutRouter.HandleFunc("/finish", komerceCheckoutHandler.CheckoutFinishGet).Methods("GET")
-	checkoutRouter.HandleFunc("/unfinish", komerceCheckoutHandler.CheckoutUnfinishGet).Methods("GET")
-	checkoutRouter.HandleFunc("/error", komerceCheckoutHandler.CheckoutErrorGet).Methods("GET")
-
-	router.HandleFunc("/midtrans-notification", komerceCheckoutHandler.MidtransNotificationPost).Methods("POST")
-
+	adminRouter.HandleFunc("/orders", adminHandler.GetOrdersPage).Methods("GET")
+	adminRouter.HandleFunc("/orders/update-status", adminHandler.UpdateOrderStatusPost).Methods("POST", "PUT")
 	return router
 }

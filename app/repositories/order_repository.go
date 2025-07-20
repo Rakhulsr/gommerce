@@ -3,6 +3,7 @@ package repositories
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/Rakhulsr/go-ecommerce/app/models"
@@ -16,12 +17,14 @@ type OrderRepository interface {
 	Update(ctx context.Context, order *models.Order) error
 	UpdateStatus(ctx context.Context, orderID string, status int) error
 	UpdatePaymentStatus(ctx context.Context, db *gorm.DB, orderID, paymentStatus string) error
-	UpdatePaymentStatusAndOrderStatus(ctx context.Context, db *gorm.DB, orderID, paymentStatus string, orderStatus int) error // NEW
+	UpdatePaymentStatusAndOrderStatus(ctx context.Context, db *gorm.DB, orderID, paymentStatus string, orderStatus int) error
 	GetOrdersByUserID(ctx context.Context, userID string) ([]models.Order, error)
 
 	GetAllOrders(ctx context.Context) ([]models.Order, error)
 	UpdateMidtransDetails(ctx context.Context, db *gorm.DB, orderID, transactionToken, paymentURL string) error
-	GetOrderByIDWithRelations(ctx context.Context, orderID string) (*models.Order, error) // NEW
+	GetOrderByIDWithRelations(ctx context.Context, orderID string) (*models.Order, error)
+	FindByCodeWithDetails(ctx context.Context, orderCode string) (*models.Order, error)
+	FindByUserID(ctx context.Context, userID string) ([]models.Order, error)
 }
 
 type gormOrderRepository struct {
@@ -39,7 +42,7 @@ func (r *gormOrderRepository) Create(ctx context.Context, tx *gorm.DB, order *mo
 func (r *gormOrderRepository) GetByID(ctx context.Context, id string) (*models.Order, error) {
 	var order models.Order
 
-	err := r.db.WithContext(ctx).Preload("OrderItems.Product.ProductImages").Preload("Address").Preload("OrderCustomer").First(&order, "id = ?", id).Error
+	err := r.db.WithContext(ctx).Preload("OrderItems.Product.ProductImages").Preload("Address").First(&order, "id = ?", id).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
@@ -52,7 +55,7 @@ func (r *gormOrderRepository) GetByID(ctx context.Context, id string) (*models.O
 func (r *gormOrderRepository) FindByCode(ctx context.Context, orderCode string) (*models.Order, error) {
 	var order models.Order
 
-	err := r.db.WithContext(ctx).Preload("OrderItems.Product.ProductImages").Preload("Address").Preload("OrderCustomer").First(&order, "order_code = ?", orderCode).Error
+	err := r.db.WithContext(ctx).Preload("OrderItems.Product.ProductImages").Preload("Address").First(&order, "order_code = ?", orderCode).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
@@ -78,7 +81,7 @@ func (r *gormOrderRepository) UpdatePaymentStatus(ctx context.Context, db *gorm.
 func (r *gormOrderRepository) GetOrdersByUserID(ctx context.Context, userID string) ([]models.Order, error) {
 	var orders []models.Order
 
-	err := r.db.WithContext(ctx).Preload("OrderItems.Product.ProductImages").Preload("Address").Preload("OrderCustomer").Where("user_id = ?", userID).Find(&orders).Error
+	err := r.db.WithContext(ctx).Preload("OrderItems.Product.ProductImages").Preload("Address").Where("user_id = ?", userID).Find(&orders).Error
 	if err != nil {
 		return nil, err
 	}
@@ -88,7 +91,7 @@ func (r *gormOrderRepository) GetOrdersByUserID(ctx context.Context, userID stri
 func (r *gormOrderRepository) GetAllOrders(ctx context.Context) ([]models.Order, error) {
 	var orders []models.Order
 
-	err := r.db.WithContext(ctx).Preload("OrderItems.Product.ProductImages").Preload("Address").Preload("OrderCustomer").Find(&orders).Error
+	err := r.db.WithContext(ctx).Preload("OrderItems.Product.ProductImages").Preload("Address").Find(&orders).Error
 	if err != nil {
 		return nil, err
 	}
@@ -105,17 +108,17 @@ func (r *gormOrderRepository) UpdateMidtransDetails(ctx context.Context, db *gor
 func (r *gormOrderRepository) GetOrderByIDWithRelations(ctx context.Context, orderID string) (*models.Order, error) {
 	var order models.Order
 	err := r.db.WithContext(ctx).
+		Preload("User").
 		Preload("OrderItems").
-		Preload("OrderItems.Product"). // Pastikan produk juga di-preload untuk detail item
-		Preload("OrderCustomer").
-		Preload("User"). // Pastikan User juga di-preload untuk customer details Midtrans
+		Preload("OrderItems.Product").
+		Preload("OrderItems.Product.ProductImages").
+		Preload("Address").
 		First(&order, "id = ?", orderID).Error
-
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
-		return nil, err
+		return nil, fmt.Errorf("failed to get order with relations: %w", err)
 	}
 	return &order, nil
 }
@@ -126,4 +129,40 @@ func (r *gormOrderRepository) UpdatePaymentStatusAndOrderStatus(ctx context.Cont
 		"status":         orderStatus,
 		"updated_at":     time.Now(),
 	}).Error
+}
+
+func (r *gormOrderRepository) FindByCodeWithDetails(ctx context.Context, orderCode string) (*models.Order, error) {
+	var order models.Order
+
+	err := r.db.WithContext(ctx).
+		Preload("OrderItems").
+		Preload("OrderItems.Product").
+		Preload("OrderItems.Product.ProductImages").
+		Preload("Address").
+		Where("order_code = ?", orderCode).
+		First(&order).Error
+
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &order, nil
+}
+
+func (r *gormOrderRepository) FindByUserID(ctx context.Context, userID string) ([]models.Order, error) {
+	var orders []models.Order
+
+	err := r.db.WithContext(ctx).
+		Preload("OrderItems.Product.ProductImages").
+		Preload("Address").
+		Where("user_id = ?", userID).
+		Order("created_at DESC").
+		Find(&orders).Error
+
+	if err != nil {
+		return nil, err
+	}
+	return orders, nil
 }

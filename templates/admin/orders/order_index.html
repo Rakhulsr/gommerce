@@ -1,0 +1,166 @@
+{{ define "admin/orders/list" }}
+
+    <style>
+        /* Custom scrollbar for table */
+        .table-container {
+            width: 100%; /* Pastikan kontainer mengambil lebar penuh yang tersedia */
+            overflow-x: auto; /* Memungkinkan scroll horizontal */
+            max-height: 540px; /* PERBAIKAN: Tinggi maksimum untuk 12 baris tabel (sekitar 12 * 45px) */
+            overflow-y: auto; /* Memungkinkan scroll vertikal */
+        }
+
+        .table-container::-webkit-scrollbar {
+            height: 8px; /* Untuk scrollbar horizontal */
+            width: 8px; /* Untuk scrollbar vertikal */
+        }
+
+        .table-container::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 10px;
+        }
+
+        .table-container::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 10px;
+        }
+
+        .table-container::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+
+        /* Animations for flash messages */
+        @keyframes fadeInDown {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes fadeOut {
+            from { opacity: 1; }
+            to { opacity: 0; }
+        }
+        .animate-fade-in-down { animation: fadeInDown 0.5s ease-out forwards; }
+        .animate-fade-out { animation: fadeOut 0.5s ease-out forwards; }
+    </style>
+
+{{ template "admin_sidebar" . }}
+    <div class="flex min-h-screen bg-gray-100">
+
+        <div class="flex-1 px-6 py-8 min-w-0">
+            <h1 class="text-3xl font-bold text-gray-800 mb-6">Daftar Pesanan</h1>
+
+            {{ if .Message }}
+            <div id="flash-message" class="mb-4 p-4 rounded-lg relative flex items-center justify-between shadow-sm
+                {{ if eq .MessageStatus "success" }} bg-green-50 border border-green-300 text-green-800
+                {{ else if eq .MessageStatus "error" }} bg-red-50 border border-red-300 text-red-800
+                {{ else if eq .MessageStatus "warning" }} bg-yellow-50 border border-yellow-300 text-yellow-800
+                {{ else }} bg-blue-50 border border-blue-300 text-blue-800
+                {{ end }}">
+                <span>{{ .Message }}</span>
+                <button type="button" class="ml-4 text-gray-700 hover:text-gray-900 focus:outline-none" onclick="this.parentElement.remove()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            {{ end }}
+
+            <div class="bg-blue-50 rounded-lg shadow-sm p-6">
+                <h3 class="text-xl font-semibold text-gray-800 mb-4">Daftar Pesanan</h3>
+                {{ if .Orders }}
+                <div class="overflow-x-auto table-container">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-blue-100">
+                            <tr>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                                    Kode Pesanan
+                                </th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                                    Tanggal
+                                </th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                                    Total
+                                </th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                                    Status Pembayaran
+                                </th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                                    Status Pesanan
+                                </th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                                    Aksi
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-blue-50 divide-y divide-gray-200">
+                            {{ range $order := .Orders }}
+                            <tr>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                    <a href="/admin/orders/{{ $order.OrderCode }}" class="text-indigo-600 hover:text-indigo-900">{{ $order.OrderCode }}</a>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                                    {{ $order.OrderDate.Format "02 Jan 2006, 15:04" }}
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                                    {{ rupiah $order.GrandTotal }}
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full
+                                        {{ if eq ($order.PaymentStatus | paymentStatusText) "Lunas" }} bg-green-100 text-green-800
+                                        {{ else if eq ($order.PaymentStatus | paymentStatusText) "Menunggu Pembayaran" }} bg-yellow-100 text-yellow-800
+                                        {{ else if eq ($order.PaymentStatus | paymentStatusText) "Gagal" }} bg-red-100 text-red-800
+                                        {{ else }} bg-gray-100 text-gray-800
+                                        {{ end }}">
+                                        {{ paymentStatusText $order.PaymentStatus }}
+                                    </span>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full
+                                        {{ if eq ($order.Status | orderStatusText) "Selesai" }} bg-green-100 text-green-800
+                                        {{ else if eq ($order.Status | orderStatusText) "Dalam Pengiriman" }} bg-blue-100 text-blue-800
+                                        {{ else if eq ($order.Status | orderStatusText) "Sedang Diproses" }} bg-indigo-100 text-indigo-800
+                                        {{ else if eq ($order.Status | orderStatusText) "Menunggu Pembayaran" }} bg-yellow-100 text-yellow-800
+                                        {{ else if eq ($order.Status | orderStatusText) "Dibatalkan" }} bg-red-100 text-red-800
+                                        {{ else if eq ($order.Status | orderStatusText) "Gagal" }} bg-red-100 text-red-800
+                                        {{ else }} bg-gray-100 text-gray-800
+                                        {{ end }}">
+                                        {{ orderStatusText $order.Status }}
+                                    </span>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                    <form action="/admin/orders/update-status" method="POST" class="inline-flex items-center space-x-2">
+                                        <input type="hidden" name="_method" value="PUT">
+                                        <input type="hidden" name="order_id" value="{{ $order.ID }}">
+                                        <select name="new_status" class="block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
+                                            {{ range $val, $text := $.OrderStatusOptions }}
+                                                <option value="{{ $val }}" {{ if eq $val $order.Status }}selected{{ end }}>{{ $text }}</option>
+                                            {{ end }}
+                                        </select>
+                                    <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-3 rounded-md shadow-md transition duration-300 ease-in-out text-sm">
+                                        Update
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                        {{ end }}
+                    </tbody>
+                </table>
+            </div>
+            {{ else }}
+            <p class="text-gray-600 text-center">Tidak ada pesanan yang ditemukan.</p>
+            {{ end }}
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const flashMessage = document.getElementById('flash-message');
+        if (flashMessage) {
+            setTimeout(() => {
+                flashMessage.classList.add('animate-fade-out');
+                flashMessage.addEventListener('animationend', () => {
+                    flashMessage.remove();
+                });
+            }, 5000); // Pesan akan hilang setelah 5 detik
+        }
+    });
+</script>
+
+{{ end }}

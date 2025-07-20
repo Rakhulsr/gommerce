@@ -5,37 +5,32 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/Rakhulsr/go-ecommerce/app/configs"
-	"github.com/Rakhulsr/go-ecommerce/app/helpers"
-
 	"github.com/Rakhulsr/go-ecommerce/app/models"
 	"github.com/Rakhulsr/go-ecommerce/app/repositories"
-	"github.com/Rakhulsr/go-ecommerce/app/utils/calc"
 	"github.com/google/uuid"
 	"github.com/midtrans/midtrans-go"
-	_ "github.com/midtrans/midtrans-go/coreapi"
-	_ "github.com/midtrans/midtrans-go/iris"
 	"github.com/midtrans/midtrans-go/snap"
 	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 )
 
-var ErrInsufficientStock = errors.New("stok produk tidak mencukupi")
-var ErrOrderNotFound = errors.New("order tidak ditemukan")
+var ErrInsufficientStock = errors.New("insufficient product stock")
 
 type CheckoutService struct {
-	db                 *gorm.DB
-	cartRepo           repositories.CartRepositoryImpl
-	cartItemRepo       repositories.CartItemRepositoryImpl
-	productRepo        repositories.ProductRepositoryImpl
-	userRepo           repositories.UserRepositoryImpl
-	addressRepo        repositories.AddressRepository
-	orderRepo          repositories.OrderRepository
-	orderItemRepo      repositories.OrderItemRepository
-	orderCustomerRepo  repositories.OrderCustomerRepository
-	midtransSnapClient snap.Client
+	db                *gorm.DB
+	cartRepo          repositories.CartRepositoryImpl
+	cartItemRepo      repositories.CartItemRepositoryImpl
+	productRepo       repositories.ProductRepositoryImpl
+	userRepo          repositories.UserRepositoryImpl
+	addressRepo       repositories.AddressRepository
+	orderRepo         repositories.OrderRepository
+	orderItemRepo     repositories.OrderItemRepository
+	orderCustomerRepo repositories.OrderCustomerRepository
+	paymentRepo       repositories.PaymentRepositoryImpl
 }
 
 func NewCheckoutService(
@@ -48,292 +43,299 @@ func NewCheckoutService(
 	orderRepo repositories.OrderRepository,
 	orderItemRepo repositories.OrderItemRepository,
 	orderCustomerRepo repositories.OrderCustomerRepository,
+	paymentRepo repositories.PaymentRepositoryImpl,
 ) *CheckoutService {
 	return &CheckoutService{
-		db:                 db,
-		cartRepo:           cartRepo,
-		cartItemRepo:       cartItemRepo,
-		productRepo:        productRepo,
-		userRepo:           userRepo,
-		addressRepo:        addressRepo,
-		orderRepo:          orderRepo,
-		orderItemRepo:      orderItemRepo,
-		orderCustomerRepo:  orderCustomerRepo,
-		midtransSnapClient: configs.MidtransClient,
+		db:                db,
+		cartRepo:          cartRepo,
+		cartItemRepo:      cartItemRepo,
+		productRepo:       productRepo,
+		userRepo:          userRepo,
+		addressRepo:       addressRepo,
+		orderRepo:         orderRepo,
+		orderItemRepo:     orderItemRepo,
+		orderCustomerRepo: orderCustomerRepo,
+		paymentRepo:       paymentRepo,
 	}
 }
 
-// CreateOrder membuat order baru dan mengurangi stok produk.
-func (s *CheckoutService) CreateOrder(ctx context.Context, userID, cartID, addressID, shippingServiceCode, shippingServiceName string, shippingCost decimal.Decimal) (*models.Order, error) {
+func (s *CheckoutService) ProcessFullCheckout(ctx context.Context, userID, cartID, addressID, shippingServiceCode, shippingServiceName string, shippingCost decimal.Decimal) (*models.Order, string, error) {
+
 	tx := s.db.WithContext(ctx).Begin()
 	if tx.Error != nil {
-		return nil, fmt.Errorf("gagal memulai transaksi database: %w", tx.Error)
+		return nil, "", fmt.Errorf("failed to begin transaction: %w", tx.Error)
 	}
+
 	defer func() {
 		if r := recover(); r != nil {
+			log.Printf("PANIC: Rolling back transaction due to panic: %v", r)
 			tx.Rollback()
-			panic(r)
+		} else if tx.Error != nil {
+			log.Printf("ERROR: Rolling back transaction due to unhandled error in tx: %v", tx.Error)
+			tx.Rollback()
 		}
 	}()
 
 	cart, err := s.cartRepo.GetCartWithItems(ctx, cartID)
 	if err != nil {
 		tx.Rollback()
-		return nil, fmt.Errorf("gagal mengambil keranjang: %w", err)
+		return nil, "", fmt.Errorf("failed to get cart with items: %w", err)
 	}
 	if cart == nil || len(cart.CartItems) == 0 {
 		tx.Rollback()
-		return nil, errors.New("keranjang kosong atau tidak ditemukan")
+		return nil, "", errors.New("cart is empty or not found")
 	}
 
 	user, err := s.userRepo.FindByID(ctx, userID)
-	if err != nil || user == nil {
+	if err != nil {
 		tx.Rollback()
-		return nil, fmt.Errorf("pengguna tidak ditemukan: %w", err)
+		return nil, "", fmt.Errorf("failed to get user: %w", err)
+	}
+	if user == nil {
+		tx.Rollback()
+		return nil, "", errors.New("user not found")
 	}
 
 	address, err := s.addressRepo.FindAddressByID(ctx, addressID)
 	if err != nil {
 		tx.Rollback()
-		return nil, fmt.Errorf("gagal mengambil alamat pengiriman: %w", err)
+		return nil, "", fmt.Errorf("failed to get address: %w", err)
 	}
 	if address == nil {
 		tx.Rollback()
-		return nil, fmt.Errorf("alamat pengiriman dengan ID '%s' tidak ditemukan", addressID)
+		return nil, "", errors.New("address not found")
 	}
 
-	var totalOrderItemsGrandTotal decimal.Decimal = decimal.Zero
-	var orderItems []models.OrderItem
+	orderItems := []models.OrderItem{}
+
 	for _, cartItem := range cart.CartItems {
 		product, err := s.productRepo.GetByID(ctx, cartItem.ProductID)
-		if err != nil || product == nil {
+		if err != nil {
 			tx.Rollback()
-			return nil, fmt.Errorf("produk '%s' tidak ditemukan", cartItem.ProductID)
+			return nil, "", fmt.Errorf("failed to get product %s: %w", cartItem.ProductID, err)
 		}
+		if product == nil {
+			tx.Rollback()
+			return nil, "", fmt.Errorf("product %s not found", cartItem.ProductID)
+		}
+
 		if product.Stock < cartItem.Qty {
 			tx.Rollback()
-			return nil, ErrInsufficientStock
-		}
-		if err := s.productRepo.DecrementStock(ctx, tx, product.ID, cartItem.Qty); err != nil {
-			tx.Rollback()
-			return nil, fmt.Errorf("gagal mengurangi stok produk %s: %w", product.Name, err)
+			return nil, "", fmt.Errorf("%w: product '%s' has insufficient stock. Available: %d, Requested: %d", ErrInsufficientStock, product.Name, product.Stock, cartItem.Qty)
 		}
 
-		itemBasePrice := product.Price
-		itemBaseTotal := itemBasePrice.Mul(decimal.NewFromInt(int64(cartItem.Qty)))
-		itemDiscountAmount := product.DiscountAmount.Mul(decimal.NewFromInt(int64(cartItem.Qty)))
-		itemTaxPercent := calc.GetTaxPercent()
-		itemTaxAmount := calc.CalculateTax(itemBaseTotal.Sub(itemDiscountAmount))
-		itemSubTotal := itemBaseTotal.Sub(itemDiscountAmount)
-		itemGrandTotal := itemSubTotal.Add(itemTaxAmount).Round(0)
-
-		orderItem := models.OrderItem{
-			ID:              uuid.New().String(),
-			OrderID:         "",
+		orderItems = append(orderItems, models.OrderItem{
 			ProductID:       product.ID,
 			ProductName:     product.Name,
-			ProductSku:      product.Sku,
 			Qty:             cartItem.Qty,
-			BasePrice:       itemBasePrice,
-			BaseTotal:       itemBaseTotal,
-			TaxAmount:       itemTaxAmount,
-			TaxPercent:      itemTaxPercent,
-			DiscountAmount:  itemDiscountAmount,
-			DiscountPercent: product.DiscountPercent,
-			GrandTotal:      itemGrandTotal,
-			CreatedAt:       time.Now(),
-			UpdatedAt:       time.Now(),
-		}
-		orderItems = append(orderItems, orderItem)
-		totalOrderItemsGrandTotal = totalOrderItemsGrandTotal.Add(itemGrandTotal)
+			Price:           cartItem.Price,
+			BaseTotal:       cartItem.Subtotal,
+			TaxAmount:       decimal.Zero,
+			TaxPercent:      decimal.Zero,
+			DiscountAmount:  cartItem.DiscountAmount,
+			DiscountPercent: cartItem.DiscountPercent,
+			GrandTotal:      cartItem.Subtotal,
+		})
 	}
 
-	orderCustomer := &models.OrderCustomer{
-		ID:           uuid.New().String(),
-		FirstName:    user.FirstName,
-		LastName:     user.LastName,
-		Email:        user.Email,
-		Phone:        address.Phone,
-		Address1:     address.Address1,
-		Address2:     address.Address2,
-		LocationID:   address.LocationID,
-		LocationName: address.LocationName,
-		PostCode:     address.PostCode,
-		CreatedAt:    time.Now(),
-		UpdatedAt:    time.Now(),
-	}
-
-	if err := s.orderCustomerRepo.Create(ctx, tx, orderCustomer); err != nil {
-		tx.Rollback()
-		return nil, fmt.Errorf("gagal membuat order customer: %w", err)
-	}
-
-	orderCode := helpers.GenerateOrderCode()
-	roundedShippingCost := shippingCost.Round(0)
-	calculatedGrandTotal := totalOrderItemsGrandTotal.Add(roundedShippingCost)
-
+	orderCode := fmt.Sprintf("INV-%s-%s", time.Now().Format("20060102"), uuid.New().String()[:8])
 	order := &models.Order{
-		ID:                  uuid.New().String(),
 		UserID:              userID,
 		OrderCode:           orderCode,
-		OrderDate:           time.Now(),
-		OrderCustomerID:     orderCustomer.ID,
 		BaseTotalPrice:      cart.BaseTotalPrice,
-		TaxAmount:           cart.TaxAmount,
-		TaxPercent:          cart.TaxPercent,
 		DiscountAmount:      cart.DiscountAmount,
-		DiscountPercent:     cart.DiscountPercent,
-		ShippingCost:        roundedShippingCost,
-		GrandTotal:          calculatedGrandTotal,
-		ShippingAddress:     fmt.Sprintf("%s, %s, %s, %s", address.Address1, address.Address2, address.LocationName, address.PostCode),
-		ShippingService:     fmt.Sprintf("%s - %s", shippingServiceCode, shippingServiceName),
+		TaxPercent:          cart.TaxPercent,
+		TaxAmount:           cart.TaxAmount,
+		ShippingCost:        shippingCost,
+		GrandTotal:          cart.GrandTotal.Add(shippingCost).Round(2),
+		OrderDate:           time.Now(),
+		Status:              models.OrderStatusPending,
+		PaymentStatus:       "Pending",
 		ShippingServiceCode: shippingServiceCode,
 		ShippingServiceName: shippingServiceName,
-		PaymentStatus:       "pending",
-		Status:              models.OrderStatusPending,
-		AddressID:           addressID,
-		CreatedAt:           time.Now(),
-		UpdatedAt:           time.Now(),
+		AddressID:           address.ID,
+		ShippingAddress:     address.Address1,
+		ShippingService:     shippingServiceName,
 	}
 
 	if err := s.orderRepo.Create(ctx, tx, order); err != nil {
 		tx.Rollback()
-		return nil, fmt.Errorf("gagal membuat order: %w", err)
+		return nil, "", fmt.Errorf("failed to create order: %w", err)
 	}
+	log.Printf("DEBUG: Order created with ID: %s", order.ID)
 
 	for i := range orderItems {
 		orderItems[i].OrderID = order.ID
 	}
 	if err := s.orderItemRepo.BulkCreate(ctx, tx, orderItems); err != nil {
 		tx.Rollback()
-		return nil, fmt.Errorf("gagal membuat order items: %w", err)
+		return nil, "", fmt.Errorf("failed to create order items: %w", err)
 	}
+	log.Printf("DEBUG: Order items created for Order ID: %s", order.ID)
 
-	// Setelah order berhasil dibuat, kosongkan keranjang
-	if err := s.cartItemRepo.ClearCartItems(ctx, tx, cartID); err != nil {
+	nameParts := strings.Fields(user.FirstName + " " + user.LastName)
+	firstName := ""
+	lastName := ""
+	if len(nameParts) > 0 {
+		firstName = nameParts[0]
+		if len(nameParts) > 1 {
+			lastName = strings.Join(nameParts[1:], " ")
+		}
+	}
+	orderCustomer := &models.OrderCustomer{
+		OrderID:      order.ID,
+		FirstName:    firstName,
+		LastName:     lastName,
+		Email:        user.Email,
+		Phone:        user.Phone,
+		Address1:     address.Address1,
+		Address2:     address.Address2,
+		LocationID:   address.LocationID,
+		LocationName: address.LocationName,
+		PostCode:     address.PostCode,
+	}
+	if err := s.orderCustomerRepo.Create(ctx, tx, orderCustomer); err != nil {
 		tx.Rollback()
-		return nil, fmt.Errorf("gagal menghapus item keranjang setelah checkout: %w", err)
+		return nil, "", fmt.Errorf("failed to create order customer: %w", err)
 	}
-	// Opsional: Hapus cart itu sendiri jika tidak ada item lagi
-	// Ini akan memastikan badge cart di-reset jika middleware bergantung pada keberadaan cart
-	if err := s.cartRepo.DeleteCart(ctx, tx, cartID); err != nil {
-		log.Printf("CheckoutService.CreateOrder: Gagal menghapus keranjang %s setelah checkout (mungkin sudah kosong): %v", cartID, err)
-		// Jangan rollback, ini bukan error fatal jika cart sudah kosong
+	log.Printf("DEBUG: Order customer created for Order ID: %s", order.ID)
+
+	newPayment := &models.Payment{
+		OrderID:     order.ID,
+		Number:      order.OrderCode,
+		Amount:      order.GrandTotal,
+		Method:      "Midtrans Snap",
+		Status:      "Pending",
+		PaymentType: "Snap",
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
 	}
 
-	if err := tx.Commit().Error; err != nil {
-		return nil, fmt.Errorf("gagal melakukan commit transaksi database: %w", err)
-	}
+	snapClient := configs.GetMidtransSnapClient()
+	var midtransItemDetails []midtrans.ItemDetails
 
-	log.Printf("Order berhasil dibuat dengan kode: %s", order.OrderCode)
-	return order, nil
-}
-
-// InitiateMidtransSnapTransaction menginisiasi transaksi Midtrans Snap.
-func (s *CheckoutService) InitiateMidtransSnapTransaction(ctx context.Context, order *models.Order, user *models.User) (string, error) {
-	if order == nil || user == nil {
-		return "", errors.New("data order atau user tidak boleh kosong")
-	}
-	// KOREKSI DI SINI: Cek jika OrderCustomer.ID kosong, bukan OrderCustomer == nil
-	if order.OrderCustomer.ID == "" { // Perbaikan dari `order.OrderCustomer == nil`
-		log.Printf("InitiateMidtransSnapTransaction: OrderCustomer tidak terisi untuk order %s. Pastikan OrderCustomer di-preload.", order.OrderCode)
-		return "", errors.New("data order customer tidak lengkap (pastikan OrderCustomer di-preload)")
-	}
-	if len(order.OrderItems) == 0 {
-		log.Printf("InitiateMidtransSnapTransaction: OrderItems kosong untuk order %s. Pastikan OrderItems di-preload.", order.OrderCode)
-		return "", errors.New("data order items tidak lengkap (pastikan OrderItems di-preload)")
-	}
-
-	var midtransItems []midtrans.ItemDetails
-	for _, item := range order.OrderItems {
-		unitPrice := item.GrandTotal.Div(decimal.NewFromInt(int64(item.Qty))).IntPart()
-
-		midtransItems = append(midtransItems, midtrans.ItemDetails{
+	for _, item := range orderItems {
+		itemName := item.ProductName
+		if len(itemName) > 50 {
+			itemName = itemName[:50]
+		}
+		priceForMidtrans := item.GrandTotal.Round(0).IntPart()
+		midtransItemDetails = append(midtransItemDetails, midtrans.ItemDetails{
 			ID:    item.ProductID,
-			Name:  item.ProductName,
-			Price: unitPrice,
+			Name:  itemName,
+			Price: int64(priceForMidtrans),
 			Qty:   int32(item.Qty),
 		})
 	}
 
-	if order.ShippingCost.GreaterThan(decimal.Zero) {
-		midtransItems = append(midtransItems, midtrans.ItemDetails{
-			ID:    "SHIPPING_FEE",
-			Name:  "Biaya Pengiriman (" + order.ShippingService + ")",
-			Price: order.ShippingCost.IntPart(),
+	shippingItemName := fmt.Sprintf("Biaya Pengiriman (%s - %s)", order.ShippingServiceCode, order.ShippingServiceName)
+	if len(shippingItemName) > 50 {
+		shippingItemName = shippingItemName[:50]
+	}
+	shippingCostForMidtrans := order.ShippingCost.Round(0).IntPart()
+	midtransItemDetails = append(midtransItemDetails, midtrans.ItemDetails{
+		ID:    "SHIPPING_FEE",
+		Name:  shippingItemName,
+		Price: int64(shippingCostForMidtrans),
+		Qty:   1,
+	})
+
+	initialItemsTotal := decimal.Zero
+	for _, item := range midtransItemDetails {
+		initialItemsTotal = initialItemsTotal.Add(decimal.NewFromInt(item.Price).Mul(decimal.NewFromInt32(item.Qty)))
+	}
+	targetGrossAmount := order.GrandTotal.Round(0)
+	difference := targetGrossAmount.Sub(initialItemsTotal)
+
+	if difference.Abs().GreaterThan(decimal.NewFromFloat(0.01)) {
+		midtransItemDetails = append(midtransItemDetails, midtrans.ItemDetails{
+			ID:    "ADJUSTMENT",
+			Name:  "Penyesuaian Total Harga",
+			Price: difference.IntPart(),
 			Qty:   1,
 		})
 	}
+	grossAmountForMidtrans := order.GrandTotal.Round(0).IntPart()
 
-	// --- Debug Logging Tambahan ---
-	log.Printf("Midtrans Request Debug - OrderCode: %s", order.OrderCode)
-	log.Printf("Midtrans Request Debug - GrossAmt (dari Order.GrandTotal decimal): %s, GrossAmt (sent to Midtrans - int part): %d", order.GrandTotal.String(), order.GrandTotal.IntPart())
-
-	var debugSumOfItemPrices int64 = 0
-	for i, item := range midtransItems {
-		log.Printf("Midtrans Request Debug - Item %d: Name=%s, ID=%s, Price=%d, Qty=%d", i, item.Name, item.ID, item.Price, item.Qty)
-		debugSumOfItemPrices += item.Price * int64(item.Qty)
+	custDetails := &midtrans.CustomerDetails{
+		FName: user.FirstName,
+		LName: user.LastName,
+		Email: user.Email,
+		Phone: user.Phone,
+		BillAddr: &midtrans.CustomerAddress{
+			FName:       address.Name,
+			Address:     address.Address1,
+			City:        address.LocationName,
+			Postcode:    address.PostCode,
+			Phone:       address.Phone,
+			CountryCode: "IDN",
+		},
+		ShipAddr: &midtrans.CustomerAddress{
+			FName:       address.Name,
+			Address:     address.Address1,
+			City:        address.LocationName,
+			Postcode:    address.PostCode,
+			Phone:       address.Phone,
+			CountryCode: "IDN",
+		},
 	}
-	log.Printf("Midtrans Request Debug - Sum of ALL ItemDetails.Price (calculated by backend): %d", debugSumOfItemPrices)
-
-	if order.GrandTotal.IntPart() != debugSumOfItemPrices {
-		log.Printf("Midtrans Request Debug - !!! WARNING: GrossAmt (%d) TIDAK SAMA dengan Sum of ItemDetails.Price (%d). Ini kemungkinan besar akan menyebabkan error Midtrans.", order.GrandTotal.IntPart(), debugSumOfItemPrices)
-	}
-	// --- End Debug Logging ---
 
 	snapReq := &snap.Request{
 		TransactionDetails: midtrans.TransactionDetails{
 			OrderID:  order.OrderCode,
-			GrossAmt: order.GrandTotal.IntPart(),
+			GrossAmt: int64(grossAmountForMidtrans),
 		},
-		CreditCard: &snap.CreditCardDetails{
-			Secure: true,
-		},
-		CustomerDetail: &midtrans.CustomerDetails{
-			FName: user.FirstName,
-			LName: user.LastName,
-			Email: user.Email,
-			Phone: order.OrderCustomer.Phone,
-			BillAddr: &midtrans.CustomerAddress{
-				FName:       user.FirstName,
-				LName:       user.LastName,
-				Address:     order.OrderCustomer.Address1,
-				City:        order.OrderCustomer.LocationName, // Menggunakan LocationName
-				Postcode:    order.OrderCustomer.PostCode,
-				Phone:       order.OrderCustomer.Phone,
-				CountryCode: "IDN",
-			},
-			ShipAddr: &midtrans.CustomerAddress{
-				FName:       user.FirstName,
-				LName:       user.LastName,
-				Address:     order.OrderCustomer.Address1,
-				City:        order.OrderCustomer.LocationName, // Menggunakan LocationName
-				Postcode:    order.OrderCustomer.PostCode,
-				Phone:       order.OrderCustomer.Phone,
-				CountryCode: "IDN",
-			},
-		},
-		Items: &midtransItems,
-		Callbacks: &snap.Callbacks{
-			Finish: fmt.Sprintf("%s/checkout/finish?order_id=%s", configs.LoadENV.APP_URL, order.OrderCode),
-		},
+		Items:           &midtransItemDetails,
+		CustomerDetail:  custDetails,
 		EnabledPayments: snap.AllSnapPaymentType,
-		CustomField1:    order.ID,
-		CustomField2:    user.ID,
+		Callbacks: &snap.Callbacks{
+			Finish: configs.GetAppBaseURL() + "/checkout/finish?order_code=" + order.OrderCode,
+		},
 	}
 
-	snapResp, err := s.midtransSnapClient.CreateTransaction(snapReq)
+	snapResp, errMidtrans := snapClient.CreateTransaction(snapReq)
+
+	if errMidtrans != nil {
+		log.Printf("Midtrans CreateTransaction Error: %v", errMidtrans)
+		tx.Rollback()
+		return nil, "", fmt.Errorf("failed to initiate Midtrans transaction: %w", errMidtrans)
+	}
+
+	if snapResp == nil || snapResp.RedirectURL == "" || snapResp.Token == "" {
+		log.Printf("Midtrans CreateTransaction returned empty or invalid response for OrderCode: %s. Response: %+v", order.OrderCode, snapResp)
+		tx.Rollback()
+		return nil, "", errors.New("midtrans transaction initiated but returned invalid response (missing redirect URL or token)")
+	}
+
+	log.Printf("DEBUG: Midtrans transaction created successfully. Snap Response: %+v", snapResp)
+
+	newPayment.Token = snapResp.Token
+
+	if err := s.paymentRepo.Create(ctx, tx, newPayment); err != nil {
+		tx.Rollback()
+		log.Printf("ERROR: Failed to create payment record for OrderID %s: %v", order.ID, err)
+		return nil, "", fmt.Errorf("failed to create payment record: %w", err)
+	}
+	log.Printf("DEBUG: Payment record created for Payment ID: %s", newPayment.ID)
+
+	log.Printf("DEBUG: Attempting to update Order status for OrderID: %s", order.ID)
+
+	err = s.orderRepo.UpdatePaymentStatusAndOrderStatus(ctx, tx, order.ID, "Pending", models.OrderStatusPending)
 	if err != nil {
-		log.Printf("InitiateMidtransSnapTransaction: Gagal memanggil Midtrans CreateTransaction untuk OrderCode %s: %v", order.OrderCode, err)
-		return "", fmt.Errorf("gagal menginisiasi transaksi Midtrans: %w", err)
+		tx.Rollback()
+		log.Printf("ERROR: Failed to update order status for OrderID %s: %v", order.ID, err)
+		return nil, "", fmt.Errorf("failed to update order status: %w", err)
 	}
+	log.Printf("DEBUG: Order status updated to Pending for OrderID: %s", order.ID)
 
-	time.Sleep(2 * time.Second) // Delay 2 detik
-
-	if err := s.orderRepo.UpdateMidtransDetails(ctx, s.db, order.ID, snapResp.Token, snapResp.RedirectURL); err != nil {
-		log.Printf("InitiateMidtransSnapTransaction: Gagal memperbarui detail Midtrans di order %s: %v", order.ID, err)
+	err = tx.Commit().Error
+	if err != nil {
+		log.Printf("ERROR: Failed to commit database transaction after payment/order status update: %v", err)
+		return nil, "", fmt.Errorf("failed to commit database transaction: %w", err)
 	}
+	log.Printf("DEBUG: Database transaction committed successfully for OrderID: %s", order.ID)
 
-	log.Printf("Midtrans Snap Transaction berhasil diinisiasi untuk OrderCode: %s, Snap URL: %s", order.OrderCode, snapResp.RedirectURL)
-	return snapResp.RedirectURL, nil
+	log.Printf("DEBUG: Successfully processed full checkout for OrderID: %s. Returning result.", order.OrderCode)
+	log.Printf("SUCCESS: Order %s created, Payment record created, and Midtrans Snap initiated. Redirect URL: %s", order.OrderCode, snapResp.RedirectURL)
+	return order, snapResp.RedirectURL, nil
 }
