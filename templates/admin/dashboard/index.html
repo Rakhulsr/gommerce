@@ -1,9 +1,9 @@
-{{ define "admin/dashboard_index" }}
+{{ define "admin/dashboard/index" }}
 
 <div class="flex min-h-screen bg-gray-100">
-    {{ template "admin_sidebar" . }}
+    
 
-    <div class="flex-1 px-6 py-8 min-w-0"> {# Pastikan min-w-0 ada di sini #}
+    <div class="flex-1 px-6 py-8 min-w-0"> 
         <h1 class="text-3xl font-bold text-gray-800 mb-6">Dashboard Admin</h1>
 
         {{ if .Message }}

@@ -1,0 +1,261 @@
+{{ define "layout_admin" }}
+
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ template "title" . }}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="/css/style.css" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <style>
+        .table-container {
+            width: 100%; 
+           
+            max-height: 540px; 
+            overflow-x: auto;
+            overflow-y: auto; 
+        }
+
+        .table-container::-webkit-scrollbar {
+            height: 8px;
+            width: 8px;
+        }
+
+        .table-container::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 10px;
+        }
+
+        .table-container::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 10px;
+        }
+
+        .table-container::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+
+    
+        @keyframes fadeInDown {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes fadeOut {
+            from { opacity: 1; }
+            to { opacity: 0; }
+        }
+        .animate-fade-in-down { animation: fadeInDown 0.5s ease-out forwards; }
+        .animate-fade-out { animation: fadeOut 0.5s ease-out forwards; }
+
+    
+        .table-auto-width {
+            width: 100%; 
+            table-layout: fixed; 
+        }
+
+        .table-auto-width th,
+        .table-auto-width td {
+            white-space: normal;
+            word-wrap: break-word; 
+            overflow-wrap: break-word; 
+            padding-left: 1.5rem; 
+            padding-right: 1.5rem; 
+            padding-top: 1rem; 
+            padding-bottom: 1rem;
+            text-align: left;
+        }
+
+ 
+        .table-container.products-table {
+            min-width: 1100px; 
+        }
+        .table-container.products-table th:nth-child(1), 
+        .table-container.products-table td:nth-child(1) {
+            width: 120px;
+        }
+        .table-container.products-table th:nth-child(2), 
+        .table-container.products-table td:nth-child(2) {
+            width: 180px; 
+        }
+        .table-container.products-table th:nth-child(3), /* SKU */
+        .table-container.products-table td:nth-child(3) {
+            width: 100px; /* Lebar tetap untuk SKU */
+        }
+        .table-container.products-table th:nth-child(4), /* Harga */
+        .table-container.products-table td:nth-child(4) {
+            width: 100px;
+        }
+        .table-container.products-table th:nth-child(5), /* Diskon (%) */
+        .table-container.products-table td:nth-child(5) {
+            width: 80px;
+        }
+        .table-container.products-table th:nth-child(6), /* Diskon (Jumlah) */
+        .table-container.products-table td:nth-child(6) {
+            width: 100px;
+        }
+        .table-container.products-table th:nth-child(7), /* Stok */
+        .table-container.products-table td:nth-child(7) {
+            width: 70px;
+        }
+        .table-container.products-table th:nth-child(8), /* Kategori */
+        .table-container.products-table td:nth-child(8) {
+            width: 120px;
+        }
+        .table-container.products-table th:nth-child(9), /* Tanggal Dibuat */
+        .table-container.products-table td:nth-child(9) {
+            width: 120px;
+        }
+        .table-container.products-table th:nth-child(10), /* Aksi */
+        .table-container.products-table td:nth-child(10) {
+            width: 100px; /* Cukup untuk tombol Edit/Hapus */
+        }
+
+      
+ 
+        .table-container.categories-table {
+            min-width: 700px; /
+        }
+        .table-container.categories-table th:nth-child(1), 
+        .table-container.categories-table td:nth-child(1) {
+            width: 150px;
+        }
+        .table-container.categories-table th:nth-child(2),
+        .table-container.categories-table td:nth-child(2) {
+            width: 250px;
+        }
+        .table-container.categories-table th:nth-child(3),
+        .table-container.categories-table td:nth-child(3) {
+            width: 250px;
+        }
+        .table-container.categories-table th:nth-child(4),
+        .table-container.categories-table td:nth-child(4) {
+            width: 120px;
+        }
+
+       
+    
+        .table-container.orders-table {
+            min-width: 900px; 
+        }
+        .table-container.orders-table th:nth-child(1),
+        .table-container.orders-table td:nth-child(1) {
+            width: 150px;
+        }
+        .table-container.orders-table th:nth-child(2), 
+        .table-container.orders-table td:nth-child(2) {
+            width: 150px;
+        }
+        .table-container.orders-table th:nth-child(3), /* Total */
+        .table-container.orders-table td:nth-child(3) {
+            width: 120px;
+        }
+        .table-container.orders-table th:nth-child(4), /* Status Pembayaran */
+        .table-container.orders-table td:nth-child(4) {
+            width: 150px;
+        }
+        .table-container.orders-table th:nth-child(5), /* Status Pesanan */
+        .table-container.orders-table td:nth-child(5) {
+            width: 150px;
+        }
+        .table-container.orders-table th:nth-child(6), /* Aksi */
+        .table-container.orders-table td:nth-child(6) {
+            width: 180px; /* Lebih lebar karena ada select dan button */
+        }
+
+        /* --- Lebar Kolom Spesifik untuk Tabel Pengguna --- */
+        /* Total 4 kolom */
+        .table-container.users-table {
+            min-width: 700px; /* Min-width untuk tabel pengguna */
+        }
+        .table-container.users-table th:nth-child(1), /* Nama */
+        .table-container.users-table td:nth-child(1) {
+            width: 200px;
+        }
+        .table-container.users-table th:nth-child(2), /* Email */
+        .table-container.users-table td:nth-child(2) {
+            width: 250px;
+        }
+        .table-container.users-table th:nth-child(3), /* Role */
+        .table-container.users-table td:nth-child(3) {
+            width: 100px;
+        }
+        .table-container.users-table th:nth-child(4), /* Aksi */
+        .table-container.users-table td:nth-child(4) {
+            width: 150px;
+        }
+
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-900 ">
+    {{ template "header" . }}
+    <div class="flex min-h-screen">
+        
+      
+        <div class="w-64 flex-shrink-0"> 
+            {{ template "admin_sidebar" . }}
+        </div>
+
+        <main class="flex-1 p-6 min-w-0 overflow-x-hidden"> 
+            {{ yield }}
+        </main>
+    </div>
+
+    {{ template "footer" .}}
+    
+    <script src="/js/index.js"></script>
+    <script src="/js/addCart.js"></script>
+    <script src="/js/flashMsg.js"></script>
+    
+
+    <script>
+        window.addEventListener('load', () => {
+            const preloader = document.getElementById('preloader');
+            if (preloader) {
+                preloader.classList.add('hidden');
+            }
+        });
+    </script>
+
+    <script>
+        async function updateCartBadge() {
+            try {
+                const response = await fetch('/cart-count');
+                if (!response.ok) {
+                    throw new Error('Failed to fetch cart count');
+                }
+                const count = await response.text();
+                const cartBadge = document.getElementById('cart-badge');
+                if (cartBadge) {
+                    cartBadge.textContent = count;
+                    if (parseInt(count) === 0) {
+                        cartBadge.classList.add('hidden');
+                    } else {
+                        cartBadge.classList.remove('hidden');
+                    }
+                }
+            } catch (error) {
+                console.error('Error updating cart badge:', error);
+                const cartBadge = document.getElementById('cart-badge');
+                if (cartBadge) {
+                    cartBadge.textContent = '0';
+                    cartBadge.classList.add('hidden');
+                }
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            updateCartBadge();
+            document.querySelectorAll('form[action^="/carts"]').forEach(form => {
+                form.addEventListener('submit', function(event) {
+                    // Logic for cart updates, relies on page reload for now.
+                });
+            });
+        });
+    </script>
+</body>
+</html>
+
+{{ end }}

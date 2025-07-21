@@ -24,6 +24,7 @@ func NewRouter(db *gorm.DB) *mux.Router {
 
 	router := mux.NewRouter()
 	render := renderer.New()
+	adminRender := renderer.NewAdminRenderer()
 
 	sessionKeys, err := configs.LoadSessionKeysFromEnv()
 	if err != nil {
@@ -65,7 +66,7 @@ func NewRouter(db *gorm.DB) *mux.Router {
 	komerceCartHandler := handlers.NewKomerceCartHandler(productRepo, cartRepo, render, cartItemRepo, komerceShippingSvc, userRepo, addressRepo, cartSvc, originID)
 	authHandler := handlers.NewAuthHandler(render, userRepo, cartRepo, sessionStore, mailer, validate)
 	komerceAddressHandler := handlers.NewKomerceAddressHandler(render, addressRepo, userRepo, komerceShippingSvc, validate)
-	adminHandler := admin.NewAdminHandler(render, validate, productRepo, categoryRepo, sectionRepo, userRepo, cartRepo, cartItemRepo, *cartSvc, orderRepo)
+	adminHandler := admin.NewAdminHandler(adminRender, validate, productRepo, categoryRepo, sectionRepo, userRepo, cartRepo, cartItemRepo, *cartSvc, orderRepo)
 	komerceCheckoutHandler := handlers.NewKomerceCheckoutHandler(render, validate, checkoutSvc, cartRepo, userRepo, orderRepo, productRepo, db, komerceShippingSvc, addressRepo, sessionStore, *paymentSvc, cartItemRepo)
 	orderHandler := handlers.NewOrderHandler(render, orderRepo, userRepo, paymentRepo)
 

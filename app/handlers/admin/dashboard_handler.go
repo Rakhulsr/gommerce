@@ -116,7 +116,7 @@ type CategoryForm struct {
 	ID   string `form:"id"`
 	Name string `form:"name" validate:"required,min=3,max=100"`
 	Slug string
-	// ParentID  string `form:"parent_id"`
+
 	SectionID string `form:"section_id"`
 }
 
@@ -156,6 +156,7 @@ func (h *AdminHandler) populateBaseDataForAdmin(r *http.Request, pageData interf
 		return
 	}
 
+	// Mengisi field-field BasePageData
 	if title, ok := baseDataMap["Title"].(string); ok {
 		base.Title = title
 	}
@@ -202,7 +203,6 @@ func (h *AdminHandler) populateBaseDataForAdmin(r *http.Request, pageData interf
 		base.IsAdminRoute = false
 	}
 }
-
 func (h *AdminHandler) applyGlobalDiscount(ctx context.Context, discountPercent float64) error {
 	discountDecimal := decimal.NewFromFloat(discountPercent)
 
@@ -286,7 +286,7 @@ func (h *AdminHandler) GetDashboard(w http.ResponseWriter, r *http.Request) {
 		data.CurrentGlobalDiscount = 0.0
 	}
 
-	h.render.HTML(w, http.StatusOK, "admin/dashboard_index", data)
+	h.render.HTML(w, http.StatusOK, "admin/dashboard/index", data)
 }
 
 func (h *AdminHandler) ApplyGlobalDiscountPost(w http.ResponseWriter, r *http.Request) {

@@ -19,15 +19,17 @@ import (
 )
 
 func (h *AdminHandler) GetProductsPage(w http.ResponseWriter, r *http.Request) {
-	data := &AdminProductPageData{}
-	h.populateBaseDataForAdmin(r, data)
 
-	data.Title = "Manajemen Produk"
-	data.IsAuthPage = true
-	data.IsAdminPage = true
-	data.HideAdminWelcomeMessage = true
+	pageData := &AdminProductPageData{}
 
-	data.Breadcrumbs = []breadcrumb.Breadcrumb{
+	h.populateBaseDataForAdmin(r, pageData)
+
+	pageData.Title = "Manajemen Produk"
+	pageData.IsAuthPage = true
+	pageData.IsAdminPage = true
+	pageData.HideAdminWelcomeMessage = true
+
+	pageData.Breadcrumbs = []breadcrumb.Breadcrumb{
 		{Name: "Beranda", URL: "/"},
 		{Name: "Admin", URL: "/admin/dashboard"},
 		{Name: "Produk", URL: "/admin/products"},
@@ -36,13 +38,38 @@ func (h *AdminHandler) GetProductsPage(w http.ResponseWriter, r *http.Request) {
 	products, err := h.productRepo.GetProducts(r.Context())
 	if err != nil {
 		log.Printf("GetProductsPage: Gagal mengambil daftar produk: %v", err)
-		data.Message = "Gagal mengambil daftar produk."
-		data.MessageStatus = "error"
+		pageData.Message = "Gagal mengambil daftar produk."
+		pageData.MessageStatus = "error"
 	} else {
-		data.Products = products
+		pageData.Products = products
 	}
 
-	h.render.HTML(w, http.StatusOK, "admin/products/index", data)
+	dataMap := make(map[string]interface{})
+
+	dataMap["Title"] = pageData.Title
+	dataMap["IsLoggedIn"] = pageData.IsLoggedIn
+	dataMap["User"] = pageData.User
+	dataMap["UserID"] = pageData.UserID
+	dataMap["CartCount"] = pageData.CartCount
+	dataMap["CSRFToken"] = pageData.CSRFToken
+	dataMap["Message"] = pageData.Message
+	dataMap["MessageStatus"] = pageData.MessageStatus
+	dataMap["Query"] = pageData.Query
+	dataMap["Breadcrumbs"] = pageData.Breadcrumbs
+	dataMap["IsAuthPage"] = pageData.IsAuthPage
+	dataMap["IsAdminPage"] = pageData.IsAdminPage
+	dataMap["HideAdminWelcomeMessage"] = pageData.HideAdminWelcomeMessage
+	dataMap["CurrentPath"] = pageData.CurrentPath
+	dataMap["IsAdminRoute"] = pageData.IsAdminRoute
+
+	dataMap["Products"] = pageData.Products
+	dataMap["ProductData"] = pageData.ProductData
+	dataMap["IsEdit"] = pageData.IsEdit
+	dataMap["FormAction"] = pageData.FormAction
+	dataMap["Errors"] = pageData.Errors
+	dataMap["Categories"] = pageData.Categories
+
+	h.render.HTML(w, http.StatusOK, "admin/products/index", dataMap)
 }
 
 func (h *AdminHandler) AddProductPage(w http.ResponseWriter, r *http.Request) {
@@ -50,7 +77,7 @@ func (h *AdminHandler) AddProductPage(w http.ResponseWriter, r *http.Request) {
 		FormAction: "/admin/products/add",
 		IsEdit:     false,
 		ProductData: &ProductForm{
-			DiscountPercent: "0", // Default value for new product
+			DiscountPercent: "0",
 		},
 		Errors: make(map[string]string),
 	}
@@ -95,7 +122,7 @@ func (h *AdminHandler) AddProductPost(w http.ResponseWriter, r *http.Request) {
 	form.Weight = r.PostFormValue("weight")
 	form.ImagePath = r.PostFormValue("image_path")
 	form.CategoryID = r.PostFormValue("category_id")
-	form.DiscountPercent = r.PostFormValue("discount_percent") // <-- AMBIL DARI FORM
+	form.DiscountPercent = r.PostFormValue("discount_percent")
 
 	log.Printf("AddProductPost: Form diterima - Nama: %s, SKU: %s, Harga: %s, Stok: %s, Weight: %s, ImagePath: %s, CategoryID: %s, DiscountPercent: %s",
 		form.Name, form.SKU, form.Price, form.Stock, form.Weight, form.ImagePath, form.CategoryID, form.DiscountPercent)
@@ -160,15 +187,15 @@ func (h *AdminHandler) AddProductPost(w http.ResponseWriter, r *http.Request) {
 	}
 	weight := decimal.NewFromFloat(weightFloat)
 
-	discountPercentFloat, err := strconv.ParseFloat(form.DiscountPercent, 64) // <-- KONVERSI DISKON PERSEN
+	discountPercentFloat, err := strconv.ParseFloat(form.DiscountPercent, 64)
 	if err != nil {
 		log.Printf("AddProductPost: Format persentase diskon tidak valid: %v", err)
 		http.Redirect(w, r, fmt.Sprintf("/admin/products/add?status=error&message=%s", url.QueryEscape("Format persentase diskon tidak valid.")), http.StatusSeeOther)
 		return
 	}
 	discountPercent := decimal.NewFromFloat(discountPercentFloat)
-	// Hitung DiscountAmount berdasarkan Price dan DiscountPercent
-	discountAmount := calc.CalculateDiscount(price, discountPercent) // <-- HITUNG DISKON AMOUNT
+
+	discountAmount := calc.CalculateDiscount(price, discountPercent)
 
 	category, err := h.categoryRepo.GetByID(r.Context(), form.CategoryID)
 	if err != nil || category == nil {
@@ -210,8 +237,8 @@ func (h *AdminHandler) AddProductPost(w http.ResponseWriter, r *http.Request) {
 		Stock:           stock,
 		Weight:          weight,
 		Slug:            productSlug,
-		DiscountPercent: discountPercent, // <-- SET DISKON PERSEN
-		DiscountAmount:  discountAmount,  // <-- SET DISKON AMOUNT
+		DiscountPercent: discountPercent,
+		DiscountAmount:  discountAmount,
 	}
 	product.Categories = []models.Category{*category}
 

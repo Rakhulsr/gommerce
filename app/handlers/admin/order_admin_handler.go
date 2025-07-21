@@ -8,6 +8,7 @@ import (
 
 	"github.com/Rakhulsr/go-ecommerce/app/helpers"
 	"github.com/Rakhulsr/go-ecommerce/app/models"
+	"github.com/Rakhulsr/go-ecommerce/app/utils/breadcrumb"
 )
 
 func (h *AdminHandler) GetOrdersPage(w http.ResponseWriter, r *http.Request) {
@@ -26,6 +27,17 @@ func (h *AdminHandler) GetOrdersPage(w http.ResponseWriter, r *http.Request) {
 
 	pageData.Title = "Daftar Pesanan Admin"
 	pageData.Orders = orders
+
+	pageData.Title = "Manajemen Kategori"
+	pageData.IsAuthPage = true
+	pageData.IsAdminPage = true
+	pageData.HideAdminWelcomeMessage = true
+
+	pageData.Breadcrumbs = []breadcrumb.Breadcrumb{
+		{Name: "Beranda", URL: "/"},
+		{Name: "Admin", URL: "/admin/dashboard"},
+		{Name: "Orders", URL: "/admin/orders"},
+	}
 
 	pageData.OrderStatusOptions = map[int]string{
 		models.OrderStatusPending:    "Menunggu Pembayaran",

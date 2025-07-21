@@ -99,7 +99,7 @@ func (h *AdminHandler) AddCategoryPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	form.Name = r.PostFormValue("name")
-	// form.ParentID = r.PostFormValue("parent_id")
+
 	form.SectionID = section.ID
 
 	if err := h.validator.Struct(&form); err != nil {
@@ -156,9 +156,6 @@ func (h *AdminHandler) EditCategoryPage(w http.ResponseWriter, r *http.Request) 
 		Slug:      category.Slug,
 		SectionID: category.SectionID,
 	}
-	// if category.ParentID != nil {
-	// 	formData.ParentID = *category.ParentID
-	// }
 
 	data := &AdminCategoryPageData{
 		FormAction:   fmt.Sprintf("/admin/categories/edit/%s", categoryID),
@@ -209,7 +206,7 @@ func (h *AdminHandler) EditCategoryPost(w http.ResponseWriter, r *http.Request) 
 
 	form.ID = categoryID
 	form.Name = r.PostFormValue("name")
-	// form.ParentID = r.PostFormValue("parent_id")
+
 	form.SectionID = r.PostFormValue("section_id")
 
 	if err := h.validator.Struct(&form); err != nil {
@@ -248,11 +245,7 @@ func (h *AdminHandler) EditCategoryPost(w http.ResponseWriter, r *http.Request) 
 
 	category.Name = form.Name
 	category.SectionID = form.SectionID
-	// if form.ParentID != "" {
-	// 	category.ParentID = &form.ParentID
-	// } else {
-	// 	category.ParentID = nil
-	// }
+
 	category.UpdatedAt = time.Now()
 
 	err = h.categoryRepo.Update(r.Context(), category)

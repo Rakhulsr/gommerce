@@ -61,6 +61,22 @@ func GetTemplateFunctions() template.FuncMap {
 	}
 }
 
+type AdminProductFormPageData struct {
+	other.BasePageData
+	Product    models.Product
+	Categories []models.Category
+	IsEdit     bool
+	FormAction string
+	Errors     map[string]string
+}
+
+type AdminOrderPageData struct {
+	other.BasePageData
+	Orders []models.Order
+
+	OrderStatusOptions map[int]string
+}
+
 func ClearCartIDFromSession(w http.ResponseWriter, r *http.Request, sessionStore sessions.SessionStore) {
 	session, err := sessionStore.GetSession(w, r)
 	if err != nil {
@@ -413,20 +429,4 @@ func PaymentStatusText(status string) string {
 	default:
 		return "Tidak Diketahui"
 	}
-}
-
-type AdminProductFormPageData struct {
-	other.BasePageData
-	ProductData models.Product
-	Categories  []models.Category
-	IsEdit      bool
-	FormAction  string
-	Errors      map[string]string
-}
-
-type AdminOrderPageData struct {
-	other.BasePageData
-	Orders []models.Order
-
-	OrderStatusOptions map[int]string
 }
