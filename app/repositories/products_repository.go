@@ -24,6 +24,7 @@ type ProductRepositoryImpl interface {
 	GetFeaturedProducts(ctx context.Context, limit int) ([]models.Product, error)
 	SearchProductsPaginated(ctx context.Context, keyword string, limit, offset int) ([]models.Product, int64, error)
 	GetByID(ctx context.Context, id string) (*models.Product, error)
+	GetProductCount(ctx context.Context) (int64, error)
 
 	CreateProduct(ctx context.Context, product *models.Product) error
 	UpdateProduct(ctx context.Context, product *models.Product) error
@@ -386,4 +387,14 @@ func (r *productRepository) UpdateProductTx(ctx context.Context, tx *gorm.DB, pr
 
 func (r *productRepository) UpdateStock(ctx context.Context, tx *gorm.DB, productID string, newStock int) error {
 	return tx.WithContext(ctx).Model(&models.Product{}).Where("id = ?", productID).Update("stock", newStock).Error
+}
+
+func (r *productRepository) GetProductCount(ctx context.Context) (int64, error) {
+	var count int64
+	if err := r.db.WithContext(ctx).Model(&models.Product{}).Count(&count).Error; err != nil {
+		log.Printf("ProductRepository.GetProductCount: Failed to count products: %v", err)
+		return 0, fmt.Errorf("failed to count products: %w", err)
+	}
+	log.Printf("ProductRepository.GetProductCount: Total products counted: %d", count)
+	return count, nil
 }

@@ -63,16 +63,10 @@ func NewAdminHandler(
 
 type AdminPageData struct {
 	other.BasePageData
-	TotalUsers    int
-	TotalProducts int
-	TotalOrders   int
-	RecentOrders  []struct {
-		OrderID   string
-		Customer  string
-		Amount    float64
-		Status    string
-		OrderDate time.Time
-	}
+	TotalUsers       int64
+	TotalProducts    int64
+	TotalOrders      int64
+	RecentOrders     []models.Order
 	RecentActivities []struct {
 		Activity string
 		Time     time.Time
@@ -156,7 +150,6 @@ func (h *AdminHandler) populateBaseDataForAdmin(r *http.Request, pageData interf
 		return
 	}
 
-	// Mengisi field-field BasePageData
 	if title, ok := baseDataMap["Title"].(string); ok {
 		base.Title = title
 	}
@@ -240,12 +233,12 @@ func (h *AdminHandler) applyGlobalDiscount(ctx context.Context, discountPercent 
 }
 
 func (h *AdminHandler) GetDashboard(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 	data := &AdminPageData{}
 	h.populateBaseDataForAdmin(r, data)
 
 	data.Title = "Dashboard Admin"
 	data.IsAuthPage = true
-	data.HideAdminWelcomeMessage = true
 
 	data.Breadcrumbs = []breadcrumb.Breadcrumb{
 		{Name: "Beranda", URL: "/"},
@@ -253,20 +246,43 @@ func (h *AdminHandler) GetDashboard(w http.ResponseWriter, r *http.Request) {
 		{Name: "Dashboard", URL: "/admin/dashboard"},
 	}
 
-	data.TotalUsers = 1250
-	data.TotalProducts = 500
-	data.TotalOrders = 780
+	totalUsers, err := h.userRepo.GetUserCount(ctx)
+	if err != nil {
+		log.Printf("GetDashboard: Gagal mengambil total pengguna: %v", err)
+		data.TotalUsers = 0
+	} else {
+		data.TotalUsers = totalUsers
+	}
 
-	data.RecentOrders = []struct {
-		OrderID   string
-		Customer  string
-		Amount    float64
-		Status    string
-		OrderDate time.Time
-	}{
-		{OrderID: "ORD001", Customer: "Budi Santoso", Amount: 150000.00, Status: "Pending", OrderDate: time.Now().Add(-1 * time.Hour)},
-		{OrderID: "ORD002", Customer: "Siti Aminah", Amount: 250000.00, Status: "Completed", OrderDate: time.Now().Add(-6 * time.Hour)},
-		{OrderID: "ORD003", Customer: "Joko Susilo", Amount: 80000.00, Status: "Processing", OrderDate: time.Now().Add(-24 * time.Hour)},
+	totalProducts, err := h.productRepo.GetProductCount(ctx)
+	if err != nil {
+		log.Printf("GetDashboard: Gagal mengambil total produk: %v", err)
+		data.TotalProducts = 0
+	} else {
+		data.TotalProducts = totalProducts
+	}
+
+	totalOrders, err := h.orderRepo.GetOrderCount(ctx)
+	if err != nil {
+		log.Printf("GetDashboard: Gagal mengambil total pesanan: %v", err)
+		data.TotalOrders = 0
+	} else {
+		data.TotalOrders = totalOrders
+	}
+
+	recentOrders, err := h.orderRepo.GetRecentOrders(ctx, 5)
+	if err != nil {
+		log.Printf("GetDashboard: Gagal mengambil pesanan terbaru: %v", err)
+		data.RecentOrders = []models.Order{}
+	} else {
+		data.RecentOrders = recentOrders
+	}
+
+	products, err := h.productRepo.GetProducts(ctx)
+	if err == nil && len(products) > 0 {
+		data.CurrentGlobalDiscount = products[0].DiscountPercent.InexactFloat64()
+	} else {
+		data.CurrentGlobalDiscount = 0.0
 	}
 
 	data.RecentActivities = []struct {
@@ -276,14 +292,6 @@ func (h *AdminHandler) GetDashboard(w http.ResponseWriter, r *http.Request) {
 		{Activity: "Produk baru 'Smartwatch X' ditambahkan.", Time: time.Now().Add(-30 * time.Minute)},
 		{Activity: "Pengguna 'budi.s@example.com' mendaftar.", Time: time.Now().Add(-2 * time.Hour)},
 		{Activity: "Pesanan ORD002 diselesaikan.", Time: time.Now().Add(-7 * time.Hour)},
-	}
-
-	products, err := h.productRepo.GetProducts(r.Context())
-	if err == nil && len(products) > 0 {
-
-		data.CurrentGlobalDiscount = products[0].DiscountPercent.InexactFloat64()
-	} else {
-		data.CurrentGlobalDiscount = 0.0
 	}
 
 	h.render.HTML(w, http.StatusOK, "admin/dashboard/index", data)

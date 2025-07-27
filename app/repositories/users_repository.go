@@ -33,6 +33,7 @@ type UserRepositoryImpl interface {
 	GetAllUsers(ctx context.Context) ([]models.User, error)
 	UpdateUser(ctx context.Context, user *models.User) error
 	DeleteUser(ctx context.Context, id string) error
+	GetUserCount(ctx context.Context) (int64, error)
 }
 
 type userRepository struct {
@@ -275,4 +276,14 @@ func (r *userRepository) GetUserByIDWithAddresses(ctx context.Context, id string
 		return nil, err
 	}
 	return &user, nil
+}
+
+func (r *userRepository) GetUserCount(ctx context.Context) (int64, error) {
+	var count int64
+	if err := r.db.WithContext(ctx).Model(&models.User{}).Count(&count).Error; err != nil {
+		log.Printf("UserRepository.GetUserCount: Failed to count users: %v", err)
+		return 0, fmt.Errorf("failed to count users: %w", err)
+	}
+	log.Printf("UserRepository.GetUserCount: Total users counted: %d", count)
+	return count, nil
 }

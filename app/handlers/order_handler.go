@@ -89,10 +89,9 @@ func (h *OrderHandler) OrderDetailGet(w http.ResponseWriter, r *http.Request) {
 	payment, err := h.paymentRepo.FindByOrderID(ctx, order.ID)
 	if err != nil {
 		log.Printf("OrderDetailGet: Gagal mendapatkan detail pembayaran untuk OrderID %s: %v", order.ID, err)
-		// Lanjutkan saja, field Payment di pageData akan nil, yang akan ditangani di template
+
 	}
 
-	// --- DEBUGGING START ---
 	log.Printf("DEBUG: OrderDetailGet: Detail Pesanan %s untuk template:", order.OrderCode)
 	if order.OrderItems == nil || len(order.OrderItems) == 0 {
 		log.Printf("DEBUG: OrderDetailGet: OrderItems kosong atau nil untuk pesanan %s.", order.OrderCode)
@@ -108,7 +107,6 @@ func (h *OrderHandler) OrderDetailGet(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	// --- DEBUGGING END ---
 
 	pageData := other.BasePageData{}
 	baseDataMap := helpers.GetBaseData(r, nil)

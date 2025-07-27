@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/Rakhulsr/go-ecommerce/app/models"
@@ -25,6 +26,9 @@ type OrderRepository interface {
 	GetOrderByIDWithRelations(ctx context.Context, orderID string) (*models.Order, error)
 	FindByCodeWithDetails(ctx context.Context, orderCode string) (*models.Order, error)
 	FindByUserID(ctx context.Context, userID string) ([]models.Order, error)
+
+	GetOrderCount(ctx context.Context) (int64, error)
+	GetRecentOrders(ctx context.Context, limit int) ([]models.Order, error)
 }
 
 type gormOrderRepository struct {
@@ -164,5 +168,29 @@ func (r *gormOrderRepository) FindByUserID(ctx context.Context, userID string) (
 	if err != nil {
 		return nil, err
 	}
+	return orders, nil
+}
+
+func (r *gormOrderRepository) GetOrderCount(ctx context.Context) (int64, error) {
+	var count int64
+	if err := r.db.WithContext(ctx).Model(&models.Order{}).Count(&count).Error; err != nil {
+		log.Printf("OrderRepository.GetOrderCount: Failed to count orders: %v", err)
+		return 0, fmt.Errorf("failed to count orders: %w", err)
+	}
+	log.Printf("OrderRepository.GetOrderCount: Total orders counted: %d", count)
+	return count, nil
+}
+
+func (r *gormOrderRepository) GetRecentOrders(ctx context.Context, limit int) ([]models.Order, error) {
+	var orders []models.Order
+	if err := r.db.WithContext(ctx).
+		Preload("OrderCustomer").
+		Order("created_at DESC").
+		Limit(limit).
+		Find(&orders).Error; err != nil {
+		log.Printf("OrderRepository.GetRecentOrders: Failed to retrieve recent orders: %v", err)
+		return nil, fmt.Errorf("failed to retrieve recent orders: %w", err)
+	}
+	log.Printf("OrderRepository.GetRecentOrders: Retrieved %d recent orders.", len(orders))
 	return orders, nil
 }
