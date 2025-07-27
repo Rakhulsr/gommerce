@@ -2,6 +2,7 @@ package repositories
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -243,39 +244,25 @@ func (p *productRepository) CreateProduct(ctx context.Context, product *models.P
 	return err
 }
 
-func (p *productRepository) UpdateProduct(ctx context.Context, product *models.Product) error {
-	log.Printf("ProductRepository.UpdateProduct: Attempting to update product with ID: %s, Name: %s", product.ID, product.Name)
+func (r *productRepository) UpdateProduct(ctx context.Context, product *models.Product) error {
+	log.Printf("ProductRepository.UpdateProduct: === Memulai UpdateProduct untuk ID: %s ===", product.ID)
+	log.Printf("ProductRepository.UpdateProduct: Product object received: %+v", product)
+	log.Printf("ProductRepository.UpdateProduct: ProductImages slice length received: %d", len(product.ProductImages))
+
 	product.UpdatedAt = time.Now()
 
 	if product.ID == "" {
+		log.Printf("ProductRepository.UpdateProduct: ERROR: Product ID is empty.")
 		return fmt.Errorf("product ID is empty for update")
 	}
 
-	return p.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 
 		if err := tx.Save(product).Error; err != nil {
 			log.Printf("ProductRepository.UpdateProduct: Error saving product %s in DB: %v", product.ID, err)
 			return fmt.Errorf("failed to save product: %w", err)
 		}
-		log.Printf("ProductRepository.UpdateProduct: Product %s saved successfully.", product.ID)
-
-		if err := tx.Where("product_id = ?", product.ID).Delete(&models.ProductImage{}).Error; err != nil {
-			log.Printf("ProductRepository.UpdateProduct: Error deleting old product images for product %s: %v", product.ID, err)
-			return fmt.Errorf("failed to delete old product images: %w", err)
-		}
-		log.Printf("ProductRepository.UpdateProduct: Old product images for product %s deleted.", product.ID)
-
-		for i := range product.ProductImages {
-			product.ProductImages[i].ProductID = product.ID
-
-			product.ProductImages[i].ID = uuid.New().String()
-
-			if err := tx.Create(&product.ProductImages[i]).Error; err != nil {
-				log.Printf("ProductRepository.UpdateProduct: Error creating new product image %d for product %s (ImageID: %s): %v", i, product.ID, product.ProductImages[i].ID, err)
-				return fmt.Errorf("failed to create new product image: %w", err)
-			}
-			log.Printf("ProductRepository.UpdateProduct: New product image %s created for product %s.", product.ProductImages[i].ID, product.ID)
-		}
+		log.Printf("ProductRepository.UpdateProduct: Product %s saved successfully (basic fields).", product.ID)
 
 		if err := tx.Model(product).Association("Categories").Replace(product.Categories); err != nil {
 			log.Printf("ProductRepository.UpdateProduct: Error replacing categories for product %s: %v", product.ID, err)
@@ -283,6 +270,47 @@ func (p *productRepository) UpdateProduct(ctx context.Context, product *models.P
 		}
 		log.Printf("ProductRepository.UpdateProduct: Categories replaced for product %s.", product.ID)
 
+		if len(product.ProductImages) > 0 {
+			log.Printf("ProductRepository.UpdateProduct: New image path provided in form.")
+			newImage := product.ProductImages[0]
+
+			var existingImage models.ProductImage
+			result := tx.Where("product_id = ?", product.ID).First(&existingImage)
+
+			if result.Error != nil && !errors.Is(result.Error, gorm.ErrRecordNotFound) {
+				log.Printf("ProductRepository.UpdateProduct: Error checking for existing image for product %s: %v", product.ID, result.Error)
+				return fmt.Errorf("failed to check existing product image: %w", result.Error)
+			}
+
+			if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+				log.Printf("ProductRepository.UpdateProduct: No existing image found for product %s, creating new one.", product.ID)
+				newImage.ID = uuid.New().String()
+				newImage.ProductID = product.ID
+				if err := tx.Create(&newImage).Error; err != nil {
+					log.Printf("ProductRepository.UpdateProduct: Error creating new product image %s for product %s: %v", newImage.ID, product.ID, err)
+					return fmt.Errorf("failed to create new product image: %w", err)
+				}
+				log.Printf("ProductRepository.UpdateProduct: New product image %s created for product %s.", newImage.ID, product.ID)
+			} else {
+				log.Printf("ProductRepository.UpdateProduct: Existing image found (%s) for product %s, updating it.", existingImage.ID, product.ID)
+				existingImage.Path = newImage.Path
+				existingImage.ExtraLarge = newImage.ExtraLarge
+				existingImage.Large = newImage.Large
+				existingImage.Medium = newImage.Medium
+				existingImage.Small = newImage.Small
+				existingImage.UpdatedAt = time.Now()
+
+				if err := tx.Save(&existingImage).Error; err != nil {
+					log.Printf("ProductRepository.UpdateProduct: Error updating existing product image %s for product %s: %v", existingImage.ID, product.ID, err)
+					return fmt.Errorf("failed to update existing product image: %w", err)
+				}
+				log.Printf("ProductRepository.UpdateProduct: Existing product image %s updated for product %s.", existingImage.ID, product.ID)
+			}
+		} else {
+			log.Printf("ProductRepository.UpdateProduct: No new image path provided in form. Existing images (if any) will be retained.")
+		}
+
+		log.Printf("ProductRepository.UpdateProduct: === Komit transaksi untuk ID: %s ===", product.ID)
 		return nil
 	})
 }

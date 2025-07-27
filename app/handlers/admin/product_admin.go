@@ -189,9 +189,8 @@ func (h *AdminHandler) AddProductPost(w http.ResponseWriter, r *http.Request) {
 
 	discountPercentFloat, err := strconv.ParseFloat(form.DiscountPercent, 64)
 	if err != nil {
-		log.Printf("AddProductPost: Format persentase diskon tidak valid: %v", err)
-		http.Redirect(w, r, fmt.Sprintf("/admin/products/add?status=error&message=%s", url.QueryEscape("Format persentase diskon tidak valid.")), http.StatusSeeOther)
-		return
+		log.Printf("EditProductPost: Format diskon tidak valid atau kosong, setting ke 0: %v", err)
+		discountPercentFloat = 0
 	}
 	discountPercent := decimal.NewFromFloat(discountPercentFloat)
 
@@ -363,11 +362,15 @@ func (h *AdminHandler) EditProductPost(w http.ResponseWriter, r *http.Request) {
 	form.Weight = r.PostFormValue("weight")
 	form.ImagePath = r.PostFormValue("image_path")
 	form.CategoryID = r.PostFormValue("category_id")
+	form.DiscountPercent = r.PostFormValue("discount_percent")
 
-	log.Printf("EditProductPost: Form diterima untuk produk %s - Nama: %s, SKU: %s, Harga: %s, Stok: %s, Weight: %s, ImagePath: %s, CategoryID: %s",
-		productID, form.Name, form.SKU, form.Price, form.Stock, form.Weight, form.ImagePath, form.CategoryID)
+	log.Printf("EditProductPost: Form diterima untuk produk %s - Nama: %s, SKU: %s, Harga: %s, Stok: %s, Weight: %s, ImagePath: %s, CategoryID: %s, DiscountPercent: %s",
+		productID, form.Name, form.SKU, form.Price, form.Stock, form.Weight, form.ImagePath, form.CategoryID, form.DiscountPercent)
+
+	log.Printf("EditProductPost: Memulai validasi form...")
 
 	if err := h.validator.Struct(&form); err != nil {
+		log.Printf("EditProductPost: Validasi form GAGAL: %v", err)
 		validationErrors := err.(validator.ValidationErrors)
 		formattedErrors := helpers.FormatValidationErrors(validationErrors)
 
@@ -398,6 +401,7 @@ func (h *AdminHandler) EditProductPost(w http.ResponseWriter, r *http.Request) {
 		h.render.HTML(w, http.StatusOK, "admin/products/form", data)
 		return
 	}
+	log.Printf("EditProductPost: Validasi form BERHASIL.")
 
 	priceFloat, err := strconv.ParseFloat(form.Price, 64)
 	if err != nil {
@@ -420,6 +424,13 @@ func (h *AdminHandler) EditProductPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	weight := decimal.NewFromFloat(weightFloat)
+
+	discountPercentFloat, err := strconv.ParseFloat(form.DiscountPercent, 64)
+	if err != nil {
+		log.Printf("EditProductPost: Format diskon tidak valid, setting ke 0: %v", err)
+		discountPercentFloat = 0
+	}
+	discountPercent := decimal.NewFromFloat(discountPercentFloat)
 
 	category, err := h.categoryRepo.GetByID(r.Context(), form.CategoryID)
 	if err != nil || category == nil {
@@ -445,41 +456,42 @@ func (h *AdminHandler) EditProductPost(w http.ResponseWriter, r *http.Request) {
 	product.Price = price
 	product.Stock = stock
 	product.Weight = weight
-	product.Categories = []models.Category{*category}
+	product.DiscountPercent = discountPercent
 	product.UpdatedAt = time.Now()
 	product.UserID = userID
 
+	product.Categories = []models.Category{*category}
+
 	if form.ImagePath != "" {
-		if len(product.ProductImages) > 0 {
-			product.ProductImages[0].Path = form.ImagePath
-			product.ProductImages[0].ExtraLarge = form.ImagePath
-			product.ProductImages[0].Large = form.ImagePath
-			product.ProductImages[0].Medium = form.ImagePath
-			product.ProductImages[0].Small = form.ImagePath
-		} else {
-			product.ProductImages = []models.ProductImage{
-				{
-					ID:         uuid.New().String(),
-					Path:       form.ImagePath,
-					ExtraLarge: form.ImagePath,
-					Large:      form.ImagePath,
-					Medium:     form.ImagePath,
-					Small:      form.ImagePath,
-				},
-			}
+		if len(product.ProductImages) == 0 {
+			product.ProductImages = []models.ProductImage{{}}
 		}
+		product.ProductImages[0].Path = form.ImagePath
+		product.ProductImages[0].ExtraLarge = form.ImagePath
+		product.ProductImages[0].Large = form.ImagePath
+		product.ProductImages[0].Medium = form.ImagePath
+		product.ProductImages[0].Small = form.ImagePath
 	} else {
+
 		product.ProductImages = []models.ProductImage{}
 	}
 
+	log.Printf("EditProductPost: Objek produk sebelum UpdateProduct: %+v", product)
+	log.Printf("EditProductPost: ProductImages slice length: %d", len(product.ProductImages))
+	if len(product.ProductImages) > 0 {
+		log.Printf("EditProductPost: ProductImages content: %+v", product.ProductImages[0])
+	}
+	log.Printf("EditProductPost: Memanggil h.productRepo.UpdateProduct...")
+
 	err = h.productRepo.UpdateProduct(r.Context(), product)
 	if err != nil {
-		log.Printf("EditProductPost: Gagal memperbarui produk %s: %v", productID, err)
+		log.Printf("EditProductPost: GAGAL memperbarui produk %s: %v", productID, err)
 		http.Redirect(w, r, fmt.Sprintf("/admin/products/edit/%s?status=error&message=%s", productID, url.QueryEscape("Gagal memperbarui produk: "+err.Error())), http.StatusSeeOther)
 		return
 	}
 
-	http.Redirect(w, r, fmt.Sprintf("/admin/products?status=success&message=%s", url.QueryEscape("Produk berhasil diperbarui!")), http.StatusSeeOther)
+	log.Printf("EditProductPost: Produk %s berhasil diperbarui. Melakukan redirect...", productID)
+	http.Redirect(w, r, "/admin/products?status=success&message="+url.QueryEscape("Produk berhasil diperbarui!"), http.StatusSeeOther)
 }
 
 func (h *AdminHandler) DeleteProductPost(w http.ResponseWriter, r *http.Request) {

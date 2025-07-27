@@ -143,14 +143,14 @@ func NewRouter(db *gorm.DB) *mux.Router {
 	adminRouter.HandleFunc("/products/add", adminHandler.AddProductPage).Methods("GET")
 	adminRouter.HandleFunc("/products/add", adminHandler.AddProductPost).Methods("POST")
 	adminRouter.HandleFunc("/products/edit/{id}", adminHandler.EditProductPage).Methods("GET")
-	adminRouter.HandleFunc("/products/edit/{id}", adminHandler.EditProductPost).Methods("POST")
+	adminRouter.HandleFunc("/products/edit/{id}", adminHandler.EditProductPost).Methods("POST", "PUT")
 	adminRouter.HandleFunc("/products/delete/{id}", adminHandler.DeleteProductPost).Methods("POST", "DELETE")
 
 	adminRouter.HandleFunc("/categories", adminHandler.GetCategoriesPage).Methods("GET")
 	adminRouter.HandleFunc("/categories/add", adminHandler.AddCategoryPage).Methods("GET")
 	adminRouter.HandleFunc("/categories/add", adminHandler.AddCategoryPost).Methods("POST")
 	adminRouter.HandleFunc("/categories/edit/{id}", adminHandler.EditCategoryPage).Methods("GET")
-	adminRouter.HandleFunc("/categories/edit/{id}", adminHandler.EditCategoryPost).Methods("POST")
+	adminRouter.HandleFunc("/categories/edit/{id}", adminHandler.EditCategoryPost).Methods("POST", "PUT")
 	adminRouter.HandleFunc("/categories/delete/{id}", adminHandler.DeleteCategoryPost).Methods("POST")
 
 	adminRouter.HandleFunc("/users", adminHandler.GetUsersPage).Methods("GET")

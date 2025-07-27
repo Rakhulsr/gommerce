@@ -22,6 +22,7 @@
         <div class="bg-blue-50 rounded-lg shadow-sm p-6">
             <form action="{{ .FormAction }}" method="POST">
                 {{ if .IsEdit }}
+                    <input type="hidden" name="_method" value="PUT">
                     <input type="hidden" name="id" value="{{ .CategoryData.ID }}">
                 {{ end }}
 
