@@ -33,8 +33,6 @@ func (r *PaymentRepositoryImpl) Create(ctx context.Context, tx *gorm.DB, payment
 		log.Printf("DEBUG: Using direct DB instance in PaymentRepository.Create.")
 	}
 
-	log.Printf("DEBUG: Calling dbInstance.Create for payment with OrderID: %s", payment.OrderID)
-
 	result := dbInstance.WithContext(ctx).Create(payment)
 	if result.Error != nil {
 

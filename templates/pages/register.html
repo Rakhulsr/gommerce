@@ -1,40 +1,61 @@
 {{ define "auth/register" }}
 
-<div class="bg-white p-10 rounded-2xl shadow-xl w-full text-center 
-            transform transition-all duration-300 ease-in-out 
-            hover:scale-105 hover:shadow-2xl">
-    
+<div class="bg-white p-10 rounded-2xl shadow-xl w-full text-center">
     
     <h2 class="text-3xl font-bold text-gray-800 mb-10">Daftar Akun Baru</h2>
 
+    {{ if .Message }}
+    <div class="p-4 mb-4 text-sm rounded-lg 
+        {{ if eq .MessageStatus "success" }}bg-green-100 text-green-800
+        {{ else if eq .MessageStatus "error" }}bg-red-100 text-red-800
+        {{ else }}bg-blue-100 text-blue-800{{ end }}" role="alert">
+        {{ .Message }}
+    </div>
+    {{ end }}
+
+    {{ if .Errors }}
+    <div class="p-4 mb-4 text-sm rounded-lg bg-red-100 text-red-800" role="alert">
+        <ul class="list-disc list-inside">
+            {{ range $field, $errorMsg := .Errors }}
+                <li>{{ $errorMsg }}</li>
+            {{ end }}
+        </ul>
+    </div>
+    {{ end }}
+
     <form action="/register" method="POST" class="space-y-7">
+ 
         <div>
             <label for="firstname" class="sr-only">Nama Depan</label>
             <input type="text" id="firstname" name="firstname" placeholder="Nama Depan Anda" required
                    class="w-full px-5 py-3 border border-gray-300 rounded-lg 
                           focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 
-                          transition duration-150 ease-in-out placeholder-gray-500 text-lg">
+                          transition duration-150 ease-in-out placeholder-gray-500 text-lg"
+                   value="{{ .FirstName }}">
         </div>
         <div>
             <label for="lastname" class="sr-only">Nama Belakang</label>
             <input type="text" id="lastname" name="lastname" placeholder="Nama Belakang Anda (Opsional)"
                    class="w-full px-5 py-3 border border-gray-300 rounded-lg 
                           focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 
-                          transition duration-150 ease-in-out placeholder-gray-500 text-lg">
+                          transition duration-150 ease-in-out placeholder-gray-500 text-lg"
+                   value="{{ .LastName }}"> 
         </div>
         <div>
             <label for="email" class="sr-only">Email</label>
             <input type="email" id="email" name="email" placeholder="Alamat Email Anda(WAJIB MENGGUNAKAN GMAIL)" required
                    class="w-full px-5 py-3 border border-gray-300 rounded-lg 
                           focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 
-                          transition duration-150 ease-in-out placeholder-gray-500 text-lg">
+                          transition duration-150 ease-in-out placeholder-gray-500 text-lg"
+                   value="{{ .Email }}"> 
         </div>
         <div>
             <label for="phone" class="sr-only">No.Telp</label>
             <input type="text" id="phone" name="phone" placeholder="08-xxx-xxx-xxx-x" required
                    class="w-full px-5 py-3 border border-gray-300 rounded-lg 
                           focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 
-                          transition duration-150 ease-in-out placeholder-gray-500 text-lg">
+                          transition duration-150 ease-in-out placeholder-gray-500 text-lg"
+                   value="{{ .Phone }}">
         </div>
         <div>
             <label for="password" class="sr-only">Password</label>

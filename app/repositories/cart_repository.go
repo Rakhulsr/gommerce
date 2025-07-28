@@ -98,42 +98,39 @@ func (r *cartRepository) UpdateCartSummary(ctx context.Context, cartID string) e
 	if err != nil {
 		return fmt.Errorf("gagal memperbarui ringkasan keranjang: %w", err)
 	}
-	log.Printf("UpdateCartSummary: Ringkasan keranjang untuk ID %s berhasil diperbarui. TotalItems: %d", cartID, cart.TotalItems)
+
 	return nil
 }
+
 func (r *cartRepository) UpdateCartTotalPrice(ctx context.Context, tx *gorm.DB, cartID string, baseTotalPrice, taxAmount, taxPercent, discountAmount, discountPercent decimal.Decimal, totalItems int) error {
-	// Hitung GrandTotal dari parameter yang diberikan
+
 	grandTotal := baseTotalPrice.Add(taxAmount).Sub(discountAmount)
 
 	return tx.WithContext(ctx).Model(&models.Cart{}).Where("id = ?", cartID).Updates(map[string]interface{}{
-		"base_total_price":      baseTotalPrice,
-		"tax_amount":            taxAmount,
-		"tax_percent":           taxPercent,
-		"discount_amount":       discountAmount,
-		"discount_percent":      discountPercent,
-		"grand_total":           grandTotal, // Dihitung dari parameter yang diberikan
-		"total_items":           totalItems,
-		"shipping_cost":         decimal.Zero, // Diasumsikan reset/tidak relevan untuk update ini
-		"shipping_service":      "",
-		"shipping_service_code": "",
-		"shipping_service_name": "",
-		"updated_at":            time.Now(),
+		"base_total_price": baseTotalPrice,
+		"tax_amount":       taxAmount,
+		"tax_percent":      taxPercent,
+		"discount_amount":  discountAmount,
+		"discount_percent": discountPercent,
+		"grand_total":      grandTotal,
+		"total_items":      totalItems,
+		"shipping_cost":    decimal.Zero,
+		"updated_at":       time.Now(),
 	}).Error
 }
 
-// PERBAIKAN: Implementasi metode ResetCartTotals
 func (r *cartRepository) ResetCartTotals(ctx context.Context, tx *gorm.DB, cartID string) error {
 	return tx.WithContext(ctx).Model(&models.Cart{}).Where("id = ?", cartID).Updates(map[string]interface{}{
 		"base_total_price":      decimal.Zero,
 		"tax_amount":            decimal.Zero,
-		"tax_percent":           decimal.Zero, // Atau sesuaikan dengan nilai default tax Anda
+		"tax_percent":           decimal.Zero,
 		"discount_amount":       decimal.Zero,
-		"discount_percent":      decimal.Zero, // Atau sesuaikan dengan nilai default discount Anda
+		"discount_percent":      decimal.Zero,
 		"shipping_cost":         decimal.Zero,
 		"grand_total":           decimal.Zero,
 		"total_weight":          decimal.Zero,
 		"total_items":           0,
-		"shipping_service":      "", // Reset juga service pengiriman
+		"shipping_service":      "",
 		"shipping_service_code": "",
 		"shipping_service_name": "",
 		"updated_at":            time.Now(),
@@ -173,7 +170,7 @@ func (r *cartRepository) CreateCartForUser(ctx context.Context, userID string) (
 		log.Printf("CartRepository: Failed to create cart for user %s: %v", userID, result.Error)
 		return nil, result.Error
 	}
-	log.Printf("CartRepository: Successfully created cart with ID: %s for user %s", newCart.ID, userID)
+
 	return newCart, nil
 }
 
@@ -240,7 +237,7 @@ func (r *cartRepository) GetOrCreateCartByUserID(ctx context.Context, cartID, us
 			return nil, fmt.Errorf("gagal membuat keranjang baru: %w", createErr)
 		}
 		cart = createdCart
-		log.Printf("CartRepository: Keranjang baru dibuat untuk UserID: %s, ID: %s", newCart.ID, userID)
+
 	}
 
 	return cart, nil

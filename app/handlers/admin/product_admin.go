@@ -124,9 +124,6 @@ func (h *AdminHandler) AddProductPost(w http.ResponseWriter, r *http.Request) {
 	form.CategoryID = r.PostFormValue("category_id")
 	form.DiscountPercent = r.PostFormValue("discount_percent")
 
-	log.Printf("AddProductPost: Form diterima - Nama: %s, SKU: %s, Harga: %s, Stok: %s, Weight: %s, ImagePath: %s, CategoryID: %s, DiscountPercent: %s",
-		form.Name, form.SKU, form.Price, form.Stock, form.Weight, form.ImagePath, form.CategoryID, form.DiscountPercent)
-
 	if err := h.validator.Struct(&form); err != nil {
 		validationErrors := err.(validator.ValidationErrors)
 		formattedErrors := helpers.FormatValidationErrors(validationErrors)
@@ -160,7 +157,6 @@ func (h *AdminHandler) AddProductPost(w http.ResponseWriter, r *http.Request) {
 		h.render.HTML(w, http.StatusOK, "admin/products/form", data)
 		return
 	}
-	log.Printf("AddProductPost: Validasi form berhasil.")
 
 	priceFloat, err := strconv.ParseFloat(form.Price, 64)
 	if err != nil {
@@ -169,7 +165,6 @@ func (h *AdminHandler) AddProductPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	price := decimal.NewFromFloat(priceFloat)
-	log.Printf("AddProductPost: Harga dikonversi: %s", price.String())
 
 	stock, err := strconv.Atoi(form.Stock)
 	if err != nil {
@@ -177,7 +172,6 @@ func (h *AdminHandler) AddProductPost(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, fmt.Sprintf("/admin/products/add?status=error&message=%s", url.QueryEscape("Format stok tidak valid.")), http.StatusSeeOther)
 		return
 	}
-	log.Printf("AddProductPost: Stok dikonversi: %d", stock)
 
 	weightFloat, err := strconv.ParseFloat(form.Weight, 64)
 	if err != nil {
@@ -202,7 +196,6 @@ func (h *AdminHandler) AddProductPost(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, fmt.Sprintf("/admin/products/add?status=error&message=%s", url.QueryEscape("Kategori tidak valid.")), http.StatusSeeOther)
 		return
 	}
-	log.Printf("AddProductPost: Kategori ditemukan: %s", category.Name)
 
 	userID, ok := r.Context().Value(helpers.ContextKeyUserID).(string)
 	if !ok || userID == "" {
@@ -210,7 +203,6 @@ func (h *AdminHandler) AddProductPost(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, fmt.Sprintf("/admin/products/add?status=error&message=%s", url.QueryEscape("User admin tidak terautentikasi.")), http.StatusSeeOther)
 		return
 	}
-	log.Printf("AddProductPost: UserID dari konteks: %s", userID)
 
 	newProductID := uuid.New().String()
 	productSlug := helpers.GenerateSlug(form.Name) + "-" + newProductID[:8]
@@ -253,7 +245,6 @@ func (h *AdminHandler) AddProductPost(w http.ResponseWriter, r *http.Request) {
 			},
 		}
 	}
-	log.Printf("AddProductPost: Objek produk siap disimpan: %+v", product)
 
 	err = h.productRepo.CreateProduct(r.Context(), product)
 	if err != nil {
@@ -261,7 +252,6 @@ func (h *AdminHandler) AddProductPost(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, fmt.Sprintf("/admin/products/add?status=error&message=%s", url.QueryEscape("Gagal menambahkan produk: "+err.Error())), http.StatusSeeOther)
 		return
 	}
-	log.Printf("AddProductPost: Produk berhasil dibuat di repository.")
 
 	http.Redirect(w, r, fmt.Sprintf("/admin/products?status=success&message=%s", url.QueryEscape("Produk berhasil ditambahkan!")), http.StatusSeeOther)
 }
@@ -367,8 +357,6 @@ func (h *AdminHandler) EditProductPost(w http.ResponseWriter, r *http.Request) {
 	log.Printf("EditProductPost: Form diterima untuk produk %s - Nama: %s, SKU: %s, Harga: %s, Stok: %s, Weight: %s, ImagePath: %s, CategoryID: %s, DiscountPercent: %s",
 		productID, form.Name, form.SKU, form.Price, form.Stock, form.Weight, form.ImagePath, form.CategoryID, form.DiscountPercent)
 
-	log.Printf("EditProductPost: Memulai validasi form...")
-
 	if err := h.validator.Struct(&form); err != nil {
 		log.Printf("EditProductPost: Validasi form GAGAL: %v", err)
 		validationErrors := err.(validator.ValidationErrors)
@@ -401,7 +389,6 @@ func (h *AdminHandler) EditProductPost(w http.ResponseWriter, r *http.Request) {
 		h.render.HTML(w, http.StatusOK, "admin/products/form", data)
 		return
 	}
-	log.Printf("EditProductPost: Validasi form BERHASIL.")
 
 	priceFloat, err := strconv.ParseFloat(form.Price, 64)
 	if err != nil {
@@ -476,12 +463,9 @@ func (h *AdminHandler) EditProductPost(w http.ResponseWriter, r *http.Request) {
 		product.ProductImages = []models.ProductImage{}
 	}
 
-	log.Printf("EditProductPost: Objek produk sebelum UpdateProduct: %+v", product)
-	log.Printf("EditProductPost: ProductImages slice length: %d", len(product.ProductImages))
 	if len(product.ProductImages) > 0 {
 		log.Printf("EditProductPost: ProductImages content: %+v", product.ProductImages[0])
 	}
-	log.Printf("EditProductPost: Memanggil h.productRepo.UpdateProduct...")
 
 	err = h.productRepo.UpdateProduct(r.Context(), product)
 	if err != nil {
@@ -490,7 +474,6 @@ func (h *AdminHandler) EditProductPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("EditProductPost: Produk %s berhasil diperbarui. Melakukan redirect...", productID)
 	http.Redirect(w, r, "/admin/products?status=success&message="+url.QueryEscape("Produk berhasil diperbarui!"), http.StatusSeeOther)
 }
 

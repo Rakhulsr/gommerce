@@ -162,7 +162,6 @@ func (s *CheckoutService) ProcessFullCheckout(ctx context.Context, userID, cartI
 		tx.Rollback()
 		return nil, "", fmt.Errorf("failed to create order: %w", err)
 	}
-	log.Printf("DEBUG: Order created with ID: %s", order.ID)
 
 	for i := range orderItems {
 		orderItems[i].OrderID = order.ID
@@ -171,7 +170,6 @@ func (s *CheckoutService) ProcessFullCheckout(ctx context.Context, userID, cartI
 		tx.Rollback()
 		return nil, "", fmt.Errorf("failed to create order items: %w", err)
 	}
-	log.Printf("DEBUG: Order items created for Order ID: %s", order.ID)
 
 	nameParts := strings.Fields(user.FirstName + " " + user.LastName)
 	firstName := ""
@@ -198,7 +196,6 @@ func (s *CheckoutService) ProcessFullCheckout(ctx context.Context, userID, cartI
 		tx.Rollback()
 		return nil, "", fmt.Errorf("failed to create order customer: %w", err)
 	}
-	log.Printf("DEBUG: Order customer created for Order ID: %s", order.ID)
 
 	newPayment := &models.Payment{
 		OrderID:     order.ID,
@@ -307,8 +304,6 @@ func (s *CheckoutService) ProcessFullCheckout(ctx context.Context, userID, cartI
 		return nil, "", errors.New("midtrans transaction initiated but returned invalid response (missing redirect URL or token)")
 	}
 
-	log.Printf("DEBUG: Midtrans transaction created successfully. Snap Response: %+v", snapResp)
-
 	newPayment.Token = snapResp.Token
 
 	if err := s.paymentRepo.Create(ctx, tx, newPayment); err != nil {
@@ -316,9 +311,6 @@ func (s *CheckoutService) ProcessFullCheckout(ctx context.Context, userID, cartI
 		log.Printf("ERROR: Failed to create payment record for OrderID %s: %v", order.ID, err)
 		return nil, "", fmt.Errorf("failed to create payment record: %w", err)
 	}
-	log.Printf("DEBUG: Payment record created for Payment ID: %s", newPayment.ID)
-
-	log.Printf("DEBUG: Attempting to update Order status for OrderID: %s", order.ID)
 
 	err = s.orderRepo.UpdatePaymentStatusAndOrderStatus(ctx, tx, order.ID, "Pending", models.OrderStatusPending)
 	if err != nil {
@@ -326,16 +318,13 @@ func (s *CheckoutService) ProcessFullCheckout(ctx context.Context, userID, cartI
 		log.Printf("ERROR: Failed to update order status for OrderID %s: %v", order.ID, err)
 		return nil, "", fmt.Errorf("failed to update order status: %w", err)
 	}
-	log.Printf("DEBUG: Order status updated to Pending for OrderID: %s", order.ID)
 
 	err = tx.Commit().Error
 	if err != nil {
 		log.Printf("ERROR: Failed to commit database transaction after payment/order status update: %v", err)
 		return nil, "", fmt.Errorf("failed to commit database transaction: %w", err)
 	}
-	log.Printf("DEBUG: Database transaction committed successfully for OrderID: %s", order.ID)
 
-	log.Printf("DEBUG: Successfully processed full checkout for OrderID: %s. Returning result.", order.OrderCode)
 	log.Printf("SUCCESS: Order %s created, Payment record created, and Midtrans Snap initiated. Redirect URL: %s", order.OrderCode, snapResp.RedirectURL)
 	return order, snapResp.RedirectURL, nil
 }

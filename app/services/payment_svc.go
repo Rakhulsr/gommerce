@@ -57,14 +57,11 @@ func (s *PaymentService) ProcessMidtransNotification(ctx context.Context, payloa
 	order *models.Order,
 	err error,
 ) {
-	log.Printf("PaymentService: Midtrans Notification Received for OrderCode: %s, Status: %s, FraudStatus: %s", payload.OrderID, payload.TransactionStatus, payload.FraudStatus)
 
 	var transactionStatus *coreapi.TransactionStatusResponse
 	var midtransErr *midtrans.Error
 
 	transactionStatus, midtransErr = s.midtransCoreAPIClient.CheckTransaction(payload.OrderID)
-
-	log.Printf("DEBUG: PaymentService: Result of CheckTransaction for %s: transactionStatus=%+v, midtransErr=%v", payload.OrderID, transactionStatus, midtransErr)
 
 	if midtransErr != nil {
 		log.Printf("ERROR: PaymentService: Failed to check transaction status with Midtrans API for OrderCode %s: %v", payload.OrderID, midtransErr.Error())
@@ -191,6 +188,5 @@ func (s *PaymentService) ProcessMidtransNotification(ctx context.Context, payloa
 		return "", 0, false, false, false, order, fmt.Errorf("internal server error during status update: %w", txErr)
 	}
 
-	log.Printf("SUCCESS: PaymentService: Order %s and Payment updated to PaymentStatus: %s, OrderStatus: %d. Flags: ReduceStock=%t, ClearCart=%t, RefundStock=%t", order.ID, newPaymentStatus, newOrderStatus, shouldReduceStock, shouldClearCart, shouldRefundStock)
 	return newPaymentStatus, newOrderStatus, shouldReduceStock, shouldClearCart, shouldRefundStock, order, nil
 }

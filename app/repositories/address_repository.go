@@ -143,6 +143,6 @@ func (r *GormAddressRepository) SetAllAddressesNonPrimary(ctx context.Context, u
 		log.Printf("GormAddressRepository.SetAllAddressesNonPrimary: Gagal mengatur alamat user %s menjadi non-utama: %v", userID, result.Error)
 		return result.Error
 	}
-	log.Printf("GormAddressRepository.SetAllAddressesNonPrimary: Berhasil mengatur %d alamat user %s menjadi non-utama.", result.RowsAffected, userID)
+
 	return nil
 }

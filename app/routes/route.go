@@ -31,6 +31,8 @@ func NewRouter(db *gorm.DB) *mux.Router {
 		log.Fatalf("Failed to load session keys for router initialization: %v", err)
 	}
 
+	sessionStore := sessions.NewCookieSessionStore(sessionKeys.AuthKey, sessionKeys.EncKey)
+
 	productRepo := repositories.NewProductRepository(db)
 	categoryRepo := repositories.NewCategoryRepository(db)
 	cartItemRepo := repositories.NewCartItemRepository(db)
@@ -46,7 +48,6 @@ func NewRouter(db *gorm.DB) *mux.Router {
 	cartSvc := services.NewCartService(cartRepo, cartItemRepo, productRepo, db)
 	komerceShippingSvc := services.NewKomerceRajaOngkirClient(env.API_ONGKIR_KEY_KOMERCE)
 
-	sessionStore := sessions.NewCookieSessionStore(sessionKeys.AuthKey, sessionKeys.EncKey)
 	emailConfig := services.Config{
 		Host:     env.EmailHost,
 		Port:     env.EmailPort,
@@ -92,8 +93,10 @@ func NewRouter(db *gorm.DB) *mux.Router {
 
 	router.HandleFunc("/login", authHandler.LoginGetHandler).Methods("GET")
 	router.HandleFunc("/login", authHandler.LoginPostHandler).Methods("POST")
+
 	router.HandleFunc("/register", authHandler.RegisterGetHandler).Methods("GET")
 	router.HandleFunc("/register", authHandler.RegisterPostHandler).Methods("POST")
+
 	router.HandleFunc("/forgot-password", authHandler.ForgotPasswordGetHandler).Methods("GET")
 	router.HandleFunc("/forgot-password", authHandler.ForgotPasswordPostHandler).Methods("POST")
 	router.HandleFunc("/verify-otp", authHandler.VerifyOTPGetHandler).Methods("GET")
@@ -112,6 +115,7 @@ func NewRouter(db *gorm.DB) *mux.Router {
 	authenticated.HandleFunc("/profile", authHandler.ProfileHandler).Methods("GET")
 	authenticated.HandleFunc("/profile/edit", authHandler.UpdateProfilePost).Methods("POST", "PUT")
 	authenticated.HandleFunc("/profile/edit", authHandler.UpdateProfilePage).Methods("GET")
+
 	authenticated.HandleFunc("/logout", authHandler.LogoutHandler).Methods("POST")
 
 	authenticated.HandleFunc("/addresses", komerceAddressHandler.GetAddressesPage).Methods("GET")

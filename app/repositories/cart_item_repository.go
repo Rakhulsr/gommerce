@@ -96,6 +96,6 @@ func (r *CartItemRepository) DeleteAllItemsByCartID(ctx context.Context, tx *gor
 		log.Printf("ERROR: Failed to delete cart items for CartID %s: %v", cartID, result.Error)
 		return fmt.Errorf("failed to delete cart items: %w", result.Error)
 	}
-	log.Printf("DEBUG: %d cart items deleted for CartID %s", result.RowsAffected, cartID)
+
 	return nil
 }

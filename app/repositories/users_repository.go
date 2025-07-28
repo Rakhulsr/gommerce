@@ -238,7 +238,6 @@ func (r *userRepository) UpdateUser(ctx context.Context, user *models.User) erro
 		return fmt.Errorf("failed to update user: %w", err)
 	}
 
-	log.Printf("UserRepository.UpdateUser: User %s updated successfully.", user.ID)
 	return nil
 }
 
@@ -247,7 +246,6 @@ func (r *userRepository) DeleteUser(ctx context.Context, id string) error {
 		log.Printf("UserRepository.DeleteUser: Error deleting user %s: %v", id, err)
 		return fmt.Errorf("failed to delete user: %w", err)
 	}
-	log.Printf("UserRepository.DeleteUser: User %s deleted successfully.", id)
 	return nil
 }
 
@@ -259,7 +257,7 @@ func (r *userRepository) FindBySelector(ctx context.Context, selector string) (*
 
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil // User tidak ditemukan, bukan error fatal
+			return nil, nil
 		}
 		return nil, err
 	}
@@ -284,6 +282,6 @@ func (r *userRepository) GetUserCount(ctx context.Context) (int64, error) {
 		log.Printf("UserRepository.GetUserCount: Failed to count users: %v", err)
 		return 0, fmt.Errorf("failed to count users: %w", err)
 	}
-	log.Printf("UserRepository.GetUserCount: Total users counted: %d", count)
+
 	return count, nil
 }

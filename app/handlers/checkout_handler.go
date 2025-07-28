@@ -1,652 +1,555 @@
 package handlers
 
-// import (
-// 	"crypto/sha512"
-// 	"encoding/hex"
-// 	"fmt"
-// 	"log"
-// 	"net/http"
-// 	"net/url"
-// 	"strconv"
-// 	"strings"
-
-// 	"github.com/Rakhulsr/go-ecommerce/app/helpers"
-// 	"github.com/Rakhulsr/go-ecommerce/app/models"
-// 	"github.com/Rakhulsr/go-ecommerce/app/models/other"
-// 	"github.com/Rakhulsr/go-ecommerce/app/repositories"
-// 	"github.com/Rakhulsr/go-ecommerce/app/services"
-// 	"github.com/Rakhulsr/go-ecommerce/app/utils/breadcrumb"
-// 	"github.com/shopspring/decimal"
-// 	"gorm.io/gorm"
-
-// 	"github.com/go-playground/validator/v10"
-// 	"github.com/midtrans/midtrans-go"
-// 	"github.com/midtrans/midtrans-go/coreapi"
-// 	"github.com/unrolled/render"
-// )
-
-// type CheckoutHandler struct {
-// 	render          *render.Render
-// 	validator       *validator.Validate
-// 	checkoutSvc     *services.CheckoutService
-// 	cartRepo        repositories.CartRepositoryImpl
-// 	userRepo        repositories.UserRepositoryImpl
-// 	orderRepo       repositories.OrderRepository
-// 	productRepo     repositories.ProductRepositoryImpl
-// 	midtransCoreAPI coreapi.Client
-// 	db              *gorm.DB
-// 	rajaOngkirSvc   services.RajaOngkirClient
-// 	addressRepo     repositories.AddressRepository
-// }
-
-// func NewCheckoutHandler(
-// 	render *render.Render,
-// 	validator *validator.Validate,
-// 	checkoutSvc *services.CheckoutService,
-// 	cartRepo repositories.CartRepositoryImpl,
-// 	userRepo repositories.UserRepositoryImpl,
-// 	orderRepo repositories.OrderRepository,
-// 	productRepo repositories.ProductRepositoryImpl,
-// 	db *gorm.DB,
-// 	rajaOngkirSvc services.RajaOngkirClient,
-// 	addressRepo repositories.AddressRepository,
-// ) *CheckoutHandler {
-// 	return &CheckoutHandler{
-// 		render:      render,
-// 		validator:   validator,
-// 		checkoutSvc: checkoutSvc,
-// 		cartRepo:    cartRepo,
-// 		userRepo:    userRepo,
-// 		orderRepo:   orderRepo,
-// 		productRepo: productRepo,
-// 		midtransCoreAPI: coreapi.Client{
-// 			ServerKey: midtrans.ServerKey,
-// 			Env:       midtrans.Sandbox,
-// 		},
-// 		db:            db,
-// 		rajaOngkirSvc: rajaOngkirSvc,
-// 		addressRepo:   addressRepo,
-// 	}
-// }
-
-// type CheckoutForm struct {
-// 	AddressID           string `form:"addressid" validate:"required"`
-// 	ShippingServiceCode string `form:"shippingservicecode" validate:"required"`
-// 	ShippingServiceName string `form:"shippingservicename" validate:"required"`
-// 	ShippingCost        string `form:"shipping_cost" validate:"required,numeric,min=0"`
-// 	FinalTotalPrice     string `form:"final_total_price" validate:"required,numeric,min=0"`
-// }
-
-// type OrderConfirmationPageData struct {
-// 	other.BasePageData
-// 	Order           *models.Order
-// 	Message         string
-// 	IsSuccess       bool
-// 	OrderStatusText string // NEW: Field untuk representasi string dari status pesanan
-// }
-
-// type CheckoutPageData struct {
-// 	other.BasePageData
-// 	Cart                *models.Cart
-// 	Address             *models.Address
-// 	ShippingCost        decimal.Decimal
-// 	ShippingServiceCode string
-// 	ShippingServiceName string
-// 	FinalTotalPrice     decimal.Decimal
-// 	Order               *models.Order
-// 	MidtransClientKey   string
-// }
-
-// // NEW: Fungsi helper untuk mengonversi OrderStatus (int) menjadi string
-// func getOrderStatusString(status int) string {
-// 	switch status {
-// 	case models.OrderStatusPending:
-// 		return "Pending"
-// 	case models.OrderStatusProcessing:
-// 		return "Processing"
-// 	case models.OrderStatusShipped:
-// 		return "Dikirim"
-// 	case models.OrderStatusCompleted:
-// 		return "Selesai"
-// 	case models.OrderStatusCancelled:
-// 		return "Dibatalkan"
-// 	case models.OrderStatusFailed:
-// 		return "Gagal"
-// 	default:
-// 		return "Tidak Diketahui"
-// 	}
-// }
-
-// func (h *CheckoutHandler) DisplayCheckoutConfirmation(w http.ResponseWriter, r *http.Request) {
-// 	userID, ok := r.Context().Value(helpers.ContextKeyUserID).(string)
-// 	if !ok || userID == "" {
-// 		http.Redirect(w, r, "/login", http.StatusSeeOther)
-// 		return
-// 	}
-
-// 	cart, err := h.cartRepo.GetOrCreateCartByUserID(r.Context(), "", userID)
-// 	if err != nil || cart == nil || len(cart.CartItems) == 0 {
-// 		log.Printf("DisplayCheckoutConfirmation: Gagal mengambil keranjang atau keranjang kosong untuk user %s: %v", userID, err)
-// 		h.setFlashMessage(w, r, "Keranjang Anda kosong atau sesi kadaluarsa.", "warning")
-// 		http.Redirect(w, r, "/carts", http.StatusSeeOther)
-// 		return
-// 	}
-
-// 	if err := r.ParseForm(); err != nil {
-// 		log.Printf("DisplayCheckoutConfirmation: Kesalahan parsing form: %v", err)
-// 		h.setFlashMessage(w, r, "Terjadi kesalahan saat memproses permintaan Anda.", "error")
-// 		http.Redirect(w, r, "/carts", http.StatusSeeOther)
-// 		return
-// 	}
-
-// 	var form CheckoutForm
-// 	form.AddressID = r.PostFormValue("addressid")
-// 	form.ShippingServiceCode = r.PostFormValue("shippingservicecode")
-// 	form.ShippingServiceName = r.PostFormValue("shippingservicename")
-// 	form.ShippingCost = r.PostFormValue("shipping_cost")
-// 	form.FinalTotalPrice = r.PostFormValue("final_total_price")
-
-// 	log.Printf("DisplayCheckoutConfirmation: Received form values - AddressID: '%s', ShippingCost: '%s', ServiceCode: '%s', ServiceName: '%s', FinalTotal: '%s'",
-// 		form.AddressID, form.ShippingCost, form.ShippingServiceCode, form.ShippingServiceName, form.FinalTotalPrice)
-
-// 	if err := h.validator.Struct(&form); err != nil {
-// 		validationErrors := err.(validator.ValidationErrors)
-// 		formattedErrors := helpers.FormatValidationErrors(validationErrors)
-// 		log.Printf("DisplayCheckoutConfirmation: Validasi form gagal: %+v", formattedErrors)
-// 		h.setFlashMessage(w, r, "Mohon lengkapi semua detail pengiriman dan alamat dengan benar.", "error")
-// 		http.Redirect(w, r, "/carts", http.StatusSeeOther)
-// 		return
-// 	}
-
-// 	shippingCostFloat, err := strconv.ParseFloat(form.ShippingCost, 64)
-// 	if err != nil {
-// 		log.Printf("DisplayCheckoutConfirmation: Kesalahan konversi biaya pengiriman '%s': %v", form.ShippingCost, err)
-// 		h.setFlashMessage(w, r, "Biaya pengiriman tidak valid.", "error")
-// 		http.Redirect(w, r, "/carts", http.StatusSeeOther)
-// 		return
-// 	}
-// 	shippingCostDecimal := decimal.NewFromFloat(shippingCostFloat)
-
-// 	finalTotalPriceFloat, err := strconv.ParseFloat(form.FinalTotalPrice, 64)
-// 	if err != nil {
-// 		log.Printf("DisplayCheckoutConfirmation: Kesalahan konversi total harga akhir '%s': %v", form.FinalTotalPrice, err)
-// 		h.setFlashMessage(w, r, "Total harga akhir tidak valid.", "error")
-// 		http.Redirect(w, r, "/carts", http.StatusSeeOther)
-// 		return
-// 	}
-// 	finalTotalPriceDecimal := decimal.NewFromFloat(finalTotalPriceFloat)
-
-// 	user, err := h.userRepo.FindByID(r.Context(), userID)
-// 	if err != nil || user == nil {
-// 		log.Printf("DisplayCheckoutConfirmation: Gagal mengambil user %s: %v", userID, err)
-// 		h.setFlashMessage(w, r, "User tidak ditemukan.", "error")
-// 		http.Redirect(w, r, "/carts", http.StatusSeeOther)
-// 		return
-// 	}
-
-// 	selectedAddress, err := h.addressRepo.FindAddressByID(r.Context(), form.AddressID)
-// 	if err != nil {
-// 		log.Printf("DisplayCheckoutConfirmation: Gagal mengambil alamat dengan ID %s: %v", form.AddressID, err)
-// 		h.setFlashMessage(w, r, "Alamat pengiriman tidak ditemukan.", "error")
-// 		http.Redirect(w, r, "/carts", http.StatusSeeOther)
-// 		return
-// 	}
-// 	if selectedAddress == nil || selectedAddress.UserID != userID {
-// 		log.Printf("DisplayCheckoutConfirmation: Alamat dengan ID %s tidak ditemukan atau bukan milik user %s.", form.AddressID, userID)
-// 		h.setFlashMessage(w, r, "Alamat pengiriman tidak valid.", "error")
-// 		http.Redirect(w, r, "/carts", http.StatusSeeOther)
-// 		return
-// 	}
-
-// 	if selectedAddress.ProvinceID != "" {
-// 		province, err := h.rajaOngkirSvc.GetProvinceByID(selectedAddress.ProvinceID)
-// 		if err == nil && province != nil {
-// 			selectedAddress.ProvinceName = province.Name
-// 		} else {
-// 			log.Printf("DisplayCheckoutConfirmation: Failed to get province name for ID %s: %v", selectedAddress.ProvinceID, err)
-// 			selectedAddress.ProvinceName = "Provinsi Tidak Dikenal"
-// 		}
-// 	}
-// 	if selectedAddress.CityID != "" {
-// 		city, err := h.rajaOngkirSvc.GetCityByID(selectedAddress.CityID)
-// 		if err == nil && city != nil {
-// 			selectedAddress.CityName = fmt.Sprintf("%s %s", city.Type, city.Name)
-// 		} else {
-// 			log.Printf("DisplayCheckoutConfirmation: Failed to get city name for ID %s: %v", selectedAddress.CityID, err)
-// 			selectedAddress.CityName = "Kota Tidak Dikenal"
-// 		}
-// 	}
-
-// 	data := h.newTemplateData(r)
-// 	data.Title = "Konfirmasi Pesanan"
-// 	data.Cart = cart
-// 	data.Address = selectedAddress
-// 	data.ShippingCost = shippingCostDecimal
-// 	data.ShippingServiceCode = form.ShippingServiceCode
-// 	data.ShippingServiceName = form.ShippingServiceName
-// 	data.FinalTotalPrice = finalTotalPriceDecimal
-// 	data.MidtransClientKey = midtrans.ClientKey
-
-// 	order, err := h.checkoutSvc.CreateOrder(r.Context(), userID, cart.ID, form.AddressID, form.ShippingServiceCode, form.ShippingServiceName, shippingCostDecimal)
-// 	if err != nil {
-// 		log.Printf("DisplayCheckoutConfirmation: Gagal membuat order baru: %v", err)
-// 		h.setFlashMessage(w, r, "Gagal membuat pesanan. Mohon coba lagi.", "error")
-// 		http.Redirect(w, r, "/carts", http.StatusSeeOther)
-// 		return
-// 	}
-// 	data.Order = order
-
-// 	h.render.HTML(w, http.StatusOK, "checkout/process", data)
-// }
-
-// func (h *CheckoutHandler) InitiateMidtransTransactionPost(w http.ResponseWriter, r *http.Request) {
-// 	if r.Method != http.MethodPost {
-// 		h.render.JSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "Metode tidak diizinkan"})
-// 		return
-// 	}
-
-// 	userID, ok := r.Context().Value(helpers.ContextKeyUserID).(string)
-// 	if !ok || userID == "" {
-// 		h.render.JSON(w, http.StatusUnauthorized, map[string]string{"error": "Unauthorized"})
-// 		return
-// 	}
-
-// 	var requestPayload struct {
-// 		OrderID     string  `json:"order_id"`
-// 		GrossAmount float64 `json:"gross_amount"`
-// 	}
-
-// 	if err := helpers.DecodeJSONBody(w, r, &requestPayload); err != nil {
-// 		log.Printf("InitiateMidtransTransactionPost: Gagal decode JSON body: %v", err)
-// 		h.render.JSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid JSON body"})
-// 		return
-// 	}
-
-// 	if requestPayload.OrderID == "" || requestPayload.GrossAmount <= 0 {
-// 		h.render.JSON(w, http.StatusBadRequest, map[string]string{"error": "Order ID atau Gross Amount tidak valid"})
-// 		return
-// 	}
-
-// 	order, err := h.orderRepo.FindByCode(r.Context(), requestPayload.OrderID)
-// 	if err != nil || order == nil {
-// 		log.Printf("InitiateMidtransTransactionPost: Order dengan kode %s tidak ditemukan: %v", requestPayload.OrderID, err)
-// 		// KOREKSI: Kembalikan JSON error
-// 		h.render.JSON(w, http.StatusNotFound, map[string]string{"error": "Order not found"})
-// 		return
-// 	}
-
-// 	if order.UserID != userID {
-// 		log.Printf("InitiateMidtransTransactionPost: User %s mencoba mengakses order %s milik user lain %s", userID, order.OrderCode, order.UserID)
-// 		h.render.JSON(w, http.StatusForbidden, map[string]string{"error": "Unauthorized access to order"})
-// 		return
-// 	}
-
-// 	user, err := h.userRepo.FindByID(r.Context(), order.UserID)
-// 	if err != nil || user == nil {
-// 		log.Printf("InitiateMidtransTransactionPost: Gagal mengambil user %s untuk order %s: %v", order.UserID, order.OrderCode, err)
-// 		h.render.JSON(w, http.StatusInternalServerError, map[string]string{"error": "User not found for order"})
-// 		return
-// 	}
-
-// 	midtransSnapURL, err := h.checkoutSvc.InitiateMidtransSnapTransaction(
-// 		r.Context(),
-// 		order,
-// 		user,
-// 	)
-
-// 	if err != nil {
-// 		log.Printf("InitiateMidtransTransactionPost: Gagal inisiasi Midtrans Snap: %v", err)
-// 		h.render.JSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to initiate Midtrans transaction"})
-// 		return
-// 	}
-
-// 	h.render.JSON(w, http.StatusOK, map[string]string{"token": midtransSnapURL})
-// }
-
-// func (h *CheckoutHandler) CheckoutFinishGet(w http.ResponseWriter, r *http.Request) {
-// 	orderCode := r.URL.Query().Get("order_id")
-// 	transactionStatus := r.URL.Query().Get("transaction_status")
-// 	log.Printf("CheckoutFinishGet: Callback FINISH diterima untuk Order ID: %s, Status: %s", orderCode, transactionStatus)
-
-// 	data := &OrderConfirmationPageData{}
-// 	h.populateBaseDataForOrderConfirmation(r, data)
-// 	data.Title = "Konfirmasi Pesanan"
-// 	data.IsAuthPage = true
-
-// 	order, err := h.orderRepo.FindByCode(r.Context(), orderCode)
-// 	if err != nil || order == nil {
-// 		log.Printf("CheckoutFinishGet: Pesanan dengan kode %s tidak ditemukan: %v", orderCode, err)
-// 		data.Message = "Pesanan tidak ditemukan."
-// 		data.IsSuccess = false
-// 		h.render.HTML(w, http.StatusOK, "order_confirmation", data)
-// 		return
-// 	}
-
-// 	data.Order = order
-// 	data.IsSuccess = true
-// 	data.Message = "Pembayaran berhasil diproses! Pesanan Anda sedang kami siapkan."
-// 	data.OrderStatusText = getOrderStatusString(order.Status) // NEW: Set status text
-// 	h.render.HTML(w, http.StatusOK, "order_confirmation", data)
-// }
-
-// func (h *CheckoutHandler) CheckoutErrorGet(w http.ResponseWriter, r *http.Request) {
-// 	orderCode := r.URL.Query().Get("order_id")
-// 	transactionStatus := r.URL.Query().Get("transaction_status")
-// 	log.Printf("CheckoutErrorGet: Callback ERROR diterima untuk Order ID: %s, Status: %s", orderCode, transactionStatus)
-
-// 	data := &OrderConfirmationPageData{}
-// 	h.populateBaseDataForOrderConfirmation(r, data)
-// 	data.Title = "Pembayaran Gagal"
-// 	data.IsAuthPage = true
-
-// 	order, err := h.orderRepo.FindByCode(r.Context(), orderCode)
-// 	if err != nil || order == nil {
-// 		log.Printf("CheckoutErrorGet: Pesanan dengan kode %s tidak ditemukan: %v", orderCode, err)
-// 		data.Message = "Pesanan tidak ditemukan."
-// 		data.IsSuccess = false
-// 		h.render.HTML(w, http.StatusOK, "order_confirmation", data)
-// 		return
-// 	}
-
-// 	data.Order = order
-// 	data.IsSuccess = false
-// 	data.Message = "Pembayaran Anda gagal. Mohon coba lagi atau hubungi kami."
-// 	data.OrderStatusText = getOrderStatusString(order.Status) // NEW: Set status text
-// 	h.render.HTML(w, http.StatusOK, "order_confirmation", data)
-// }
-
-// func (h *CheckoutHandler) CheckoutUnfinishGet(w http.ResponseWriter, r *http.Request) {
-// 	orderCode := r.URL.Query().Get("order_id")
-// 	transactionStatus := r.URL.Query().Get("transaction_status")
-// 	log.Printf("CheckoutUnfinishGet: Callback UNFINISH diterima untuk Order ID: %s, Status: %s", orderCode, transactionStatus)
-
-// 	data := &OrderConfirmationPageData{}
-// 	h.populateBaseDataForOrderConfirmation(r, data)
-// 	data.Title = "Pembayaran Belum Selesai"
-// 	data.IsAuthPage = true
-
-// 	order, err := h.orderRepo.FindByCode(r.Context(), orderCode)
-// 	if err != nil || order == nil {
-// 		log.Printf("CheckoutUnfinishGet: Pesanan dengan kode %s tidak ditemukan: %v", orderCode, err)
-// 		data.Message = "Pesanan tidak ditemukan."
-// 		data.IsSuccess = false
-// 		h.render.HTML(w, http.StatusOK, "order_confirmation", data)
-// 		return
-// 	}
-
-// 	data.Order = order
-// 	data.IsSuccess = false
-// 	data.Message = "Pembayaran Anda belum selesai. Silakan lanjutkan pembayaran atau coba lagi."
-// 	data.OrderStatusText = getOrderStatusString(order.Status) // NEW: Set status text
-// 	h.render.HTML(w, http.StatusOK, "order_confirmation", data)
-// }
-
-// func (h *CheckoutHandler) MidtransNotificationPost(w http.ResponseWriter, r *http.Request) {
-// 	var notificationPayload map[string]interface{}
-// 	if err := helpers.DecodeJSONBody(w, r, &notificationPayload); err != nil {
-// 		log.Printf("MidtransNotificationPost: Gagal decode JSON body: %v", err)
-// 		http.Error(w, "Invalid JSON", http.StatusBadRequest)
-// 		return
-// 	}
-
-// 	orderID, ok := notificationPayload["order_id"].(string)
-// 	if !ok || orderID == "" {
-// 		log.Println("MidtransNotificationPost: order_id tidak ditemukan di payload notifikasi.")
-// 		http.Error(w, "Invalid order_id", http.StatusBadRequest)
-// 		return
-// 	}
-
-// 	transactionStatus, ok := notificationPayload["transaction_status"].(string)
-// 	if !ok {
-// 		log.Println("MidtransNotificationPost: transaction_status tidak ditemukan di payload notifikasi.")
-// 		http.Error(w, "Invalid transaction_status", http.StatusBadRequest)
-// 		return
-// 	}
-
-// 	fraudStatus, ok := notificationPayload["fraud_status"].(string)
-// 	if !ok {
-// 		log.Println("MidtransNotificationPost: fraud_status tidak ditemukan di payload notifikasi.")
-// 		http.Error(w, "Invalid fraud_status", http.StatusBadRequest)
-// 		return
-// 	}
-
-// 	grossAmountStr, ok := notificationPayload["gross_amount"].(string)
-// 	if !ok {
-// 		log.Println("MidtransNotificationPost: gross_amount tidak ditemukan di payload notifikasi.")
-// 		http.Error(w, "Invalid gross_amount", http.StatusBadRequest)
-// 		return
-// 	}
-
-// 	grossAmountStr = strings.ReplaceAll(grossAmountStr, ".00", "")
-// 	grossAmount, err := strconv.ParseFloat(grossAmountStr, 64)
-// 	if err != nil {
-// 		log.Printf("MidtransNotificationPost: Gagal parse gross_amount: %v", err)
-// 		http.Error(w, "Invalid gross_amount format", http.StatusBadRequest)
-// 		return
-// 	}
-
-// 	log.Printf("MidtransNotificationPost: Notifikasi diterima untuk Order ID: %s, Status: %s, Fraud: %s, Gross Amount: %.2f",
-// 		orderID, transactionStatus, fraudStatus, grossAmount)
-
-// 	serverKey := h.midtransCoreAPI.ServerKey
-// 	if serverKey == "" {
-// 		log.Println("MidtransNotificationPost: MIDTRANS_SERVER_KEY tidak ditemukan.")
-// 		http.Error(w, "Server key not configured", http.StatusInternalServerError)
-// 		return
-// 	}
-
-// 	statusCodeStr, ok := notificationPayload["status_code"].(string)
-// 	if !ok {
-// 		log.Println("MidtransNotificationPost: status_code tidak ditemukan di payload notifikasi.")
-// 		http.Error(w, "Invalid status_code", http.StatusBadRequest)
-// 		return
-// 	}
-
-// 	midtransSignatureKey, ok := notificationPayload["signature_key"].(string)
-// 	if !ok {
-// 		log.Println("MidtransNotificationPost: signature_key tidak ditemukan di payload notifikasi.")
-// 		http.Error(w, "Invalid signature_key", http.StatusBadRequest)
-// 		return
-// 	}
-
-// 	isSignatureValid := isSignatureKeyValid(orderID, statusCodeStr, grossAmountStr, serverKey, midtransSignatureKey)
-// 	if !isSignatureValid {
-// 		log.Printf("MidtransNotificationPost: Signature key tidak valid untuk Order ID: %s", orderID)
-// 		http.Error(w, "Invalid signature key", http.StatusUnauthorized)
-// 		return
-// 	}
-// 	log.Printf("MidtransNotificationPost: Signature key valid untuk Order ID: %s", orderID)
-
-// 	order, err := h.orderRepo.FindByCode(r.Context(), orderID)
-// 	if err != nil || order == nil {
-// 		log.Printf("MidtransNotificationPost: Pesanan dengan kode %s tidak ditemukan di database: %v", orderID, err)
-// 		http.Error(w, "Order not found", http.StatusNotFound)
-// 		return
-// 	}
-
-// 	var newPaymentStatus string
-// 	var newOrderStatus int
-// 	shouldDecreaseStock := false
-
-// 	switch transactionStatus {
-// 	case "capture":
-// 		if fraudStatus == "accept" {
-// 			newPaymentStatus = "settlement"
-// 			newOrderStatus = models.OrderStatusProcessing
-// 			shouldDecreaseStock = true
-// 		} else if fraudStatus == "challenge" {
-// 			newPaymentStatus = "challenge"
-// 			newOrderStatus = models.OrderStatusPending
-// 		}
-// 	case "settlement":
-// 		newPaymentStatus = "settlement"
-// 		newOrderStatus = models.OrderStatusProcessing
-// 		shouldDecreaseStock = true
-// 	case "pending":
-// 		newPaymentStatus = "pending"
-// 		newOrderStatus = models.OrderStatusPending
-// 	case "deny":
-// 		newPaymentStatus = "deny"
-// 		newOrderStatus = models.OrderStatusFailed
-// 	case "expire":
-// 		newPaymentStatus = "expire"
-// 		newOrderStatus = models.OrderStatusCancelled
-// 	case "cancel":
-// 		newPaymentStatus = "cancel"
-// 		newOrderStatus = models.OrderStatusCancelled
-// 	default:
-// 		log.Printf("MidtransNotificationPost: Status transaksi tidak dikenal: %s", transactionStatus)
-// 		http.Error(w, "Unknown transaction status", http.StatusBadRequest)
-// 		return
-// 	}
-
-// 	if order.PaymentStatus != newPaymentStatus || order.Status != newOrderStatus {
-
-// 		if err := h.orderRepo.UpdatePaymentStatus(r.Context(), h.db, order.ID, newPaymentStatus); err != nil {
-// 			log.Printf("MidtransNotificationPost: Gagal memperbarui payment status order %s ke %s: %v", order.ID, newPaymentStatus, err)
-// 			http.Error(w, "Failed to update payment status", http.StatusInternalServerError)
-// 			return
-// 		}
-// 		log.Printf("MidtransNotificationPost: Payment status order %s diperbarui ke %s", order.ID, newPaymentStatus)
-
-// 		if err := h.orderRepo.UpdateStatus(r.Context(), order.ID, newOrderStatus); err != nil {
-// 			log.Printf("MidtransNotificationPost: Gagal memperbarui order status order %s ke %d: %v", order.ID, newOrderStatus, err)
-// 			http.Error(w, "Failed to update order status", http.StatusInternalServerError)
-// 			return
-// 		}
-// 		log.Printf("MidtransNotificationPost: Order status order %s diperbarui ke %d", order.ID, newOrderStatus)
-
-// 		if shouldDecreaseStock && order.Status != models.OrderStatusProcessing {
-// 			for _, item := range order.OrderItems {
-// 				product, err := h.productRepo.GetByID(r.Context(), item.ProductID)
-// 				if err != nil || product == nil {
-// 					log.Printf("MidtransNotificationPost: Produk %s untuk order item %s tidak ditemukan saat pengurangan stok: %v", item.ProductID, item.ID, err)
-// 					continue
-// 				}
-// 				if product.Stock >= item.Qty {
-// 					product.Stock -= item.Qty
-// 					if err := h.productRepo.UpdateProduct(r.Context(), product); err != nil {
-// 						log.Printf("MidtransNotificationPost: Gagal mengurangi stok produk %s: %v", product.ID, err)
-
-// 					} else {
-// 						log.Printf("MidtransNotificationPost: Stok produk %s dikurangi sebanyak %d.", product.ID, item.Qty)
-// 					}
-// 				} else {
-// 					log.Printf("MidtransNotificationPost: Stok produk %s tidak cukup untuk order item %s (stok: %d, qty: %d).", product.ID, item.ID, product.Stock, item.Qty)
-
-// 				}
-// 			}
-// 		}
-// 	} else {
-// 		log.Printf("MidtransNotificationPost: Status order %s tidak berubah (saat ini %s, target %s).", order.ID, order.PaymentStatus, newPaymentStatus)
-// 	}
-
-// 	w.WriteHeader(http.StatusOK)
-// 	fmt.Fprint(w, "Notification processed successfully")
-// }
-
-// func (h *CheckoutHandler) populateBaseDataForOrderConfirmation(r *http.Request, pageData *OrderConfirmationPageData) {
-// 	baseDataMap := helpers.GetBaseData(r, nil)
-
-// 	if title, ok := baseDataMap["Title"].(string); ok {
-// 		pageData.Title = title
-// 	}
-// 	if isLoggedIn, ok := baseDataMap["IsLoggedIn"].(bool); ok {
-// 		pageData.IsLoggedIn = isLoggedIn
-// 	}
-// 	if user, ok := baseDataMap["User"].(*other.UserForTemplate); ok {
-// 		pageData.User = user
-// 	}
-// 	if userID, ok := baseDataMap["UserID"].(string); ok {
-// 		pageData.UserID = userID
-// 	}
-// 	if cartCount, ok := baseDataMap["CartCount"].(int); ok {
-// 		pageData.CartCount = cartCount
-// 	}
-// 	if csrfToken, ok := baseDataMap["CSRFToken"].(string); ok {
-// 		pageData.CSRFToken = csrfToken
-// 	}
-// 	if message, ok := baseDataMap["Message"].(string); ok {
-// 		pageData.Message = message
-// 	}
-// 	if messageStatus, ok := baseDataMap["MessageStatus"].(string); ok {
-// 		pageData.MessageStatus = messageStatus
-// 	}
-// 	if query, ok := baseDataMap["Query"].(url.Values); ok {
-
-// 		pageData.Query = query
-// 	}
-// 	if breadcrumbs, ok := baseDataMap["Breadcrumbs"].([]breadcrumb.Breadcrumb); ok {
-// 		pageData.Breadcrumbs = breadcrumbs
-// 	}
-// 	if isAuthPage, ok := baseDataMap["IsAuthPage"].(bool); ok {
-// 		pageData.IsAuthPage = isAuthPage
-// 	}
-// 	if isAdminPage, ok := baseDataMap["IsAdminPage"].(bool); ok {
-// 		pageData.IsAdminPage = isAdminPage
-// 	}
-// 	if hideAdminWelcomeMessage, ok := baseDataMap["HideAdminWelcomeMessage"].(bool); ok {
-// 		pageData.HideAdminWelcomeMessage = hideAdminWelcomeMessage
-// 	}
-// 	pageData.CurrentPath = r.URL.Path
-// }
-
-// func isSignatureKeyValid(orderID, statusCode, grossAmount, serverKey, signatureKey string) bool {
-// 	toHash := orderID + statusCode + grossAmount + serverKey
-// 	hash := sha512.Sum512([]byte(toHash))
-// 	expectedSignature := hex.EncodeToString(hash[:])
-// 	return expectedSignature == signatureKey
-// }
-
-// func (h *CheckoutHandler) newTemplateData(r *http.Request) *CheckoutPageData {
-// 	data := &CheckoutPageData{}
-// 	baseDataMap := helpers.GetBaseData(r, nil)
-
-// 	if title, ok := baseDataMap["Title"].(string); ok {
-// 		data.Title = title
-// 	}
-// 	if isLoggedIn, ok := baseDataMap["IsLoggedIn"].(bool); ok {
-// 		data.IsLoggedIn = isLoggedIn
-// 	}
-// 	if user, ok := baseDataMap["User"].(*other.UserForTemplate); ok {
-// 		data.User = user
-// 	}
-// 	if userID, ok := baseDataMap["UserID"].(string); ok {
-// 		data.UserID = userID
-// 	}
-// 	if cartCount, ok := baseDataMap["CartCount"].(int); ok {
-// 		data.CartCount = cartCount
-// 	}
-// 	if csrfToken, ok := baseDataMap["CSRFToken"].(string); ok {
-// 		data.CSRFToken = csrfToken
-// 	}
-// 	if message, ok := baseDataMap["Message"].(string); ok {
-// 		data.Message = message
-// 	}
-// 	if messageStatus, ok := baseDataMap["MessageStatus"].(string); ok {
-// 		data.MessageStatus = messageStatus
-// 	}
-// 	if query, ok := baseDataMap["Query"].(url.Values); ok {
-
-// 		data.Query = query
-// 	}
-// 	if breadcrumbs, ok := baseDataMap["Breadcrumbs"].([]breadcrumb.Breadcrumb); ok {
-// 		data.Breadcrumbs = breadcrumbs
-// 	}
-// 	if isAuthPage, ok := baseDataMap["IsAuthPage"].(bool); ok {
-// 		data.IsAuthPage = isAuthPage
-// 	}
-// 	if isAdminPage, ok := baseDataMap["IsAdminPage"].(bool); ok {
-// 		data.IsAdminPage = isAdminPage
-// 	}
-// 	if hideAdminWelcomeMessage, ok := baseDataMap["HideAdminWelcomeMessage"].(bool); ok {
-// 		data.HideAdminWelcomeMessage = hideAdminWelcomeMessage
-// 	}
-// 	data.CurrentPath = r.URL.Path
-// 	return data
-// }
-
-// func (h *CheckoutHandler) setFlashMessage(w http.ResponseWriter, r *http.Request, message, status string) {
-
-// 	log.Printf("Flash Message: %s (Status: %s)", message, status)
-// }
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"log"
+	"net/http"
+	"net/url"
+
+	"github.com/Rakhulsr/go-ecommerce/app/helpers"
+	"github.com/Rakhulsr/go-ecommerce/app/models"
+	"github.com/Rakhulsr/go-ecommerce/app/models/other"
+	"github.com/Rakhulsr/go-ecommerce/app/repositories"
+	"github.com/Rakhulsr/go-ecommerce/app/services"
+	"github.com/Rakhulsr/go-ecommerce/app/utils/sessions"
+	"github.com/go-playground/validator/v10"
+	"github.com/shopspring/decimal"
+	"github.com/unrolled/render"
+	"gorm.io/gorm"
+)
+
+type KomerceCheckoutHandler struct {
+	render             *render.Render
+	validator          *validator.Validate
+	checkoutSvc        *services.CheckoutService
+	cartRepo           repositories.CartRepositoryImpl
+	userRepo           repositories.UserRepositoryImpl
+	orderRepo          repositories.OrderRepository
+	productRepo        repositories.ProductRepositoryImpl
+	db                 *gorm.DB
+	komerceLocationSvc services.KomerceRajaOngkirClient
+	addressRepo        repositories.AddressRepository
+	sessionStore       sessions.SessionStore
+	paymentSvc         services.PaymentService
+	cartItemRepo       repositories.CartItemRepositoryImpl
+}
+
+func NewKomerceCheckoutHandler(
+	render *render.Render,
+	validator *validator.Validate,
+	checkoutSvc *services.CheckoutService,
+	cartRepo repositories.CartRepositoryImpl,
+	userRepo repositories.UserRepositoryImpl,
+	orderRepo repositories.OrderRepository,
+	productRepo repositories.ProductRepositoryImpl,
+	db *gorm.DB,
+	komerceLocationSvc services.KomerceRajaOngkirClient,
+	addressRepo repositories.AddressRepository,
+	sessionStore sessions.SessionStore,
+	paymentSvc services.PaymentService,
+	cartItemRepo repositories.CartItemRepositoryImpl,
+) *KomerceCheckoutHandler {
+	return &KomerceCheckoutHandler{
+		render:             render,
+		validator:          validator,
+		checkoutSvc:        checkoutSvc,
+		cartRepo:           cartRepo,
+		userRepo:           userRepo,
+		orderRepo:          orderRepo,
+		productRepo:        productRepo,
+		db:                 db,
+		komerceLocationSvc: komerceLocationSvc,
+		addressRepo:        addressRepo,
+		sessionStore:       sessionStore,
+		paymentSvc:         paymentSvc,
+		cartItemRepo:       cartItemRepo,
+	}
+}
+
+type CheckoutPageDataKomerce struct {
+	other.BasePageData
+	Cart                        *models.Cart
+	SelectedAddress             *models.Address
+	ShippingCost                decimal.Decimal
+	ShippingServiceCode         string
+	ShippingServiceName         string
+	FinalTotalPrice             decimal.Decimal
+	FinalTotalPriceForJS        float64
+	Errors                      map[string]string
+	Addresses                   []models.Address
+	SelectedAddressID           string
+	SelectedShippingServiceCode string
+}
+
+func (h *KomerceCheckoutHandler) DisplayCheckoutSelection(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	userID, ok := ctx.Value(helpers.ContextKeyUserID).(string)
+	if !ok || userID == "" {
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+
+	cartID := helpers.GetCartIDFromContext(r)
+	cart, err := h.cartRepo.GetCartWithItems(ctx, cartID)
+	if err != nil || cart == nil || len(cart.CartItems) == 0 {
+		log.Printf("DisplayCheckoutSelection: Keranjang kosong atau tidak ditemukan untuk user %s: %v", userID, err)
+		http.Redirect(w, r, fmt.Sprintf("/carts?status=error&message=%s", url.QueryEscape("Keranjang belanja Anda kosong.")), http.StatusSeeOther)
+		return
+	}
+
+	addresses, err := h.addressRepo.FindAddressesByUserID(ctx, userID)
+	if err != nil {
+		log.Printf("DisplayCheckoutSelection: Gagal mengambil alamat untuk user %s: %v", userID, err)
+		http.Redirect(w, r, fmt.Sprintf("/carts?status=error&message=%s", url.QueryEscape("Gagal memuat alamat pengiriman.")), http.StatusSeeOther)
+		return
+	}
+
+	status := r.URL.Query().Get("status")
+	message := r.URL.Query().Get("message")
+
+	selectedAddressID := r.URL.Query().Get("selected_address_id")
+	shippingCostStr := r.URL.Query().Get("shipping_cost")
+	shippingServiceCode := r.URL.Query().Get("shipping_service_code")
+	shippingServiceName := r.URL.Query().Get("shipping_service_name")
+	finalTotalPriceStr := r.URL.Query().Get("final_total_price")
+
+	var selectedAddress *models.Address
+	if selectedAddressID != "" {
+		addr, err := h.addressRepo.FindAddressByID(ctx, selectedAddressID)
+		if err == nil && addr.UserID == userID {
+			selectedAddress = addr
+		}
+	}
+
+	var shippingCost decimal.Decimal
+	if sc, err := decimal.NewFromString(shippingCostStr); err == nil {
+		shippingCost = sc
+	}
+
+	var finalTotalPrice decimal.Decimal
+	if ft, err := decimal.NewFromString(finalTotalPriceStr); err == nil {
+		finalTotalPrice = ft
+	}
+
+	pageData := CheckoutPageDataKomerce{
+		Cart:                        cart,
+		Addresses:                   addresses,
+		SelectedAddress:             selectedAddress,
+		SelectedAddressID:           selectedAddressID,
+		ShippingCost:                shippingCost,
+		ShippingServiceCode:         shippingServiceCode,
+		ShippingServiceName:         shippingServiceName,
+		FinalTotalPrice:             finalTotalPrice,
+		FinalTotalPriceForJS:        finalTotalPrice.InexactFloat64(),
+		Errors:                      make(map[string]string),
+		SelectedShippingServiceCode: shippingServiceCode,
+	}
+	baseDataMap := helpers.GetBaseData(r, nil)
+	helpers.PopulateBaseData(&pageData.BasePageData, baseDataMap)
+	pageData.Title = "Checkout"
+	pageData.Message = message
+	pageData.MessageStatus = status
+
+	h.render.HTML(w, http.StatusOK, "checkot/process", pageData)
+}
+
+func (h *KomerceCheckoutHandler) DisplayCheckoutConfirmation(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	userID := ctx.Value(helpers.ContextKeyUserID).(string)
+
+	if err := r.ParseForm(); err != nil {
+		log.Printf("DisplayCheckoutConfirmation: Error parsing form: %v", err)
+		http.Redirect(w, r, fmt.Sprintf("/carts?status=error&message=%s", url.QueryEscape("Gagal memproses checkout: Kesalahan form.")), http.StatusSeeOther)
+		return
+	}
+
+	addressID := r.PostFormValue("selected_address_id")
+	shippingCostStr := r.PostFormValue("shipping_cost")
+	shippingServiceCode := r.PostFormValue("shipping_service_code")
+	shippingServiceName := r.PostFormValue("shipping_service_name")
+	finalTotalPriceStr := r.PostFormValue("final_total_price")
+
+	if addressID == "" || shippingCostStr == "" || shippingServiceCode == "" || shippingServiceName == "" || finalTotalPriceStr == "" {
+		log.Printf("DisplayCheckoutConfirmation: Data checkout tidak lengkap. AddressID: '%s', ShippingCost: '%s', ServiceCode: '%s', ServiceName: '%s', FinalTotalPrice: '%s'",
+			addressID, shippingCostStr, shippingServiceCode, shippingServiceName, finalTotalPriceStr)
+
+		http.Redirect(w, r, fmt.Sprintf("/carts?status=error&message=%s&selected_address_id=%s&shipping_cost=%s&shipping_service_code=%s&shipping_service_name=%s&final_total_price=%s",
+			url.QueryEscape("Data checkout tidak lengkap. Mohon pilih alamat dan opsi pengiriman."),
+			url.QueryEscape(addressID), url.QueryEscape(shippingCostStr), url.QueryEscape(shippingServiceCode), url.QueryEscape(shippingServiceName), url.QueryEscape(finalTotalPriceStr)), http.StatusSeeOther)
+		return
+	}
+
+	shippingCost, err := decimal.NewFromString(shippingCostStr)
+	if err != nil {
+		log.Printf("DisplayCheckoutConfirmation: Invalid shipping cost: %v", err)
+		http.Redirect(w, r, fmt.Sprintf("/carts?status=error&message=%s", url.QueryEscape("Biaya pengiriman tidak valid.")), http.StatusSeeOther)
+		return
+	}
+
+	finalTotalPrice, err := decimal.NewFromString(finalTotalPriceStr)
+	if err != nil {
+		log.Printf("DisplayCheckoutConfirmation: Invalid final total price: %v", err)
+		http.Redirect(w, r, fmt.Sprintf("/carts?status=error&message=%s", url.QueryEscape("Total harga tidak valid.")), http.StatusSeeOther)
+		return
+	}
+
+	cart, err := h.cartRepo.GetCartWithItems(ctx, helpers.GetCartIDFromContext(r))
+	if err != nil || cart == nil || len(cart.CartItems) == 0 {
+		log.Printf("DisplayCheckoutConfirmation: Keranjang kosong atau tidak ditemukan untuk user %s: %v", userID, err)
+		http.Redirect(w, r, fmt.Sprintf("/carts?status=error&message=%s", url.QueryEscape("Keranjang belanja Anda kosong.")), http.StatusSeeOther)
+		return
+	}
+
+	selectedAddress, err := h.addressRepo.FindAddressByID(ctx, addressID)
+	if err != nil || selectedAddress == nil || selectedAddress.UserID != userID {
+		log.Printf("DisplayCheckoutConfirmation: Alamat tidak ditemukan atau tidak valid untuk user %s, addressID %s: %v", userID, addressID, err)
+		http.Redirect(w, r, fmt.Sprintf("/carts?status=error&message=%s", url.QueryEscape("Alamat pengiriman tidak ditemukan atau tidak valid.")), http.StatusSeeOther)
+		return
+	}
+
+	pageData := CheckoutPageDataKomerce{
+		Cart:                 cart,
+		SelectedAddress:      selectedAddress,
+		ShippingCost:         shippingCost,
+		ShippingServiceCode:  shippingServiceCode,
+		ShippingServiceName:  shippingServiceName,
+		FinalTotalPrice:      finalTotalPrice,
+		FinalTotalPriceForJS: finalTotalPrice.InexactFloat64(),
+		Errors:               make(map[string]string),
+	}
+	baseDataMap := helpers.GetBaseData(r, nil)
+	helpers.PopulateBaseData(&pageData.BasePageData, baseDataMap)
+	pageData.Title = "Konfirmasi Checkout"
+
+	h.render.HTML(w, http.StatusOK, "checkout/process", pageData)
+}
+
+func (h *KomerceCheckoutHandler) CalculateShippingCostKomerce(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	var req CalculateShippingCostRequest
+	if err := helpers.DecodeJSONBody(w, r, &req); err != nil {
+		log.Printf("CalculateShippingCostKomerce: Error decoding JSON body: %v", err)
+		h.render.JSON(w, http.StatusBadRequest, map[string]interface{}{
+			"status":  "error",
+			"message": "Invalid request payload.",
+		})
+		return
+	}
+
+	originID := req.Origin
+	destinationID := req.Destination
+	weight := req.Weight
+	courier := req.Courier
+
+	if originID == 0 || destinationID == 0 || weight == 0 || courier == "" {
+		log.Printf("CalculateShippingCostKomerce: Data tidak lengkap. OriginID: %d, DestinationID: %d, Weight: %d, Courier: %s", originID, destinationID, weight, courier)
+		h.render.JSON(w, http.StatusBadRequest, map[string]interface{}{
+			"status":  "error",
+			"message": "Data pengiriman tidak lengkap. Mohon isi semua field yang wajib.",
+		})
+		return
+	}
+
+	if weight <= 0 {
+		log.Printf("CalculateShippingCostKomerce: Berat tidak valid: %d", weight)
+		h.render.JSON(w, http.StatusBadRequest, map[string]interface{}{
+			"status":  "error",
+			"message": "Berat tidak valid, harus berupa angka positif.",
+		})
+		return
+	}
+
+	costs, err := h.komerceLocationSvc.CalculateCost(ctx, originID, destinationID, weight, courier)
+	if err != nil {
+		log.Printf("CalculateShippingCostKomerce: Gagal menghitung biaya pengiriman dari Komerce API: %v", err)
+		h.render.JSON(w, http.StatusInternalServerError, map[string]interface{}{
+			"status":  "error",
+			"message": fmt.Sprintf("Gagal menghitung biaya pengiriman: %v", err),
+		})
+		return
+	}
+
+	if len(costs) == 0 {
+		log.Printf("CalculateShippingCostKomerce: Tidak ada biaya pengiriman ditemukan untuk rute ini.")
+		h.render.JSON(w, http.StatusOK, map[string]interface{}{
+			"status":  "success",
+			"message": "Tidak ada biaya pengiriman ditemukan untuk rute ini.",
+			"data":    []interface{}{},
+		})
+		return
+	}
+
+	log.Printf("CalculateShippingCostKomerce: Berhasil menghitung %d biaya pengiriman.", len(costs))
+	h.render.JSON(w, http.StatusOK, map[string]interface{}{
+		"status":  "success",
+		"message": "Biaya pengiriman berhasil ditemukan.",
+		"data":    costs,
+	})
+}
+
+func (h *KomerceCheckoutHandler) InitiateMidtransTransactionPost(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	userID := ctx.Value(helpers.ContextKeyUserID).(string)
+	cartID := helpers.GetCartIDFromContext(r)
+
+	var reqBody struct {
+		OrderID             string  `json:"order_id"`
+		GrossAmount         float64 `json:"gross_amount"`
+		AddressID           string  `json:"address_id"`
+		ShippingCost        float64 `json:"shipping_cost"`
+		ShippingServiceCode string  `json:"shipping_service_code"`
+		ShippingServiceName string  `json:"shipping_service_name"`
+	}
+
+	if err := helpers.DecodeJSONBody(w, r, &reqBody); err != nil {
+		log.Printf("InitiateMidtransTransactionPost: Error decoding JSON body: %v", err)
+		http.Error(w, "Invalid request payload", http.StatusBadRequest)
+		return
+	}
+
+	addressID := reqBody.AddressID
+	shippingCost := decimal.NewFromFloat(reqBody.ShippingCost)
+	shippingServiceCode := reqBody.ShippingServiceCode
+	shippingServiceName := reqBody.ShippingServiceName
+
+	if addressID == "" || shippingServiceCode == "" || shippingServiceName == "" || shippingCost.IsZero() {
+		log.Printf("InitiateMidtransTransactionPost: Data pembayaran tidak lengkap.")
+		h.render.JSON(w, http.StatusBadRequest, map[string]interface{}{
+			"success": false,
+			"message": "Data pembayaran tidak lengkap. Mohon lengkapi alamat dan opsi pengiriman.",
+		})
+		return
+	}
+
+	cart, err := h.cartRepo.GetCartWithItems(ctx, cartID)
+	if err != nil || cart == nil || len(cart.CartItems) == 0 {
+		log.Printf("InitiateMidtransTransactionPost: Keranjang kosong atau tidak ditemukan untuk user %s: %v", userID, err)
+		h.render.JSON(w, http.StatusBadRequest, map[string]interface{}{
+			"success": false,
+			"message": "Keranjang belanja Anda kosong atau tidak valid.",
+		})
+		return
+	}
+
+	for _, item := range cart.CartItems {
+		product, err := h.productRepo.GetByID(ctx, item.ProductID)
+		if err != nil || product == nil {
+			log.Printf("InitiateMidtransTransactionPost: Produk %s tidak ditemukan: %v", item.ProductID, err)
+			h.render.JSON(w, http.StatusBadRequest, map[string]interface{}{
+				"success": false,
+				"message": fmt.Sprintf("Produk '%s' tidak ditemukan.", item.Product.Name),
+			})
+			return
+		}
+		if product.Stock < item.Qty {
+			log.Printf("InitiateMidtransTransactionPost: Stok tidak mencukupi untuk produk %s. Stok: %d, Qty: %d", product.Name, product.Stock, item.Qty)
+			h.render.JSON(w, http.StatusBadRequest, map[string]interface{}{
+				"success": false,
+				"message": fmt.Sprintf("Stok produk '%s' tidak mencukupi. Sisa stok: %d", product.Name, product.Stock),
+			})
+			return
+		}
+	}
+
+	order, snapRedirectURL, err := h.checkoutSvc.ProcessFullCheckout(
+		r.Context(),
+		userID,
+		cartID,
+		addressID,
+		shippingServiceCode,
+		shippingServiceName,
+		shippingCost,
+	)
+
+	if err == nil {
+		helpers.ClearCartIDFromSession(w, r, h.sessionStore)
+		log.Printf("InitiateMidtransTransactionPost: Berhasil menginisiasi Midtrans Snap URL: %s untuk OrderID: %s", snapRedirectURL, order.OrderCode)
+		h.render.JSON(w, http.StatusOK, map[string]interface{}{
+			"success":  true,
+			"token":    snapRedirectURL,
+			"order_id": order.OrderCode,
+		})
+		return
+	}
+
+	if errors.Is(err, services.ErrInsufficientStock) {
+		h.render.JSON(w, http.StatusBadRequest, map[string]interface{}{
+			"success": false,
+			"message": "Stok produk tidak mencukupi. Mohon periksa kembali keranjang Anda.",
+		})
+		return
+	}
+
+	h.render.JSON(w, http.StatusInternalServerError, map[string]interface{}{
+		"success": false,
+		"message": fmt.Sprintf("Gagal memproses pesanan: %v", err),
+	})
+}
+
+func (h *KomerceCheckoutHandler) MidtransNotificationPost(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	var notificationPayload services.MidtransNotificationPayload
+	err := json.NewDecoder(r.Body).Decode(&notificationPayload)
+	if err != nil {
+		log.Printf("MidtransNotificationPost: Gagal decode JSON body: %v", err)
+		http.Error(w, "Invalid JSON payload", http.StatusBadRequest)
+		return
+	}
+
+	newPaymentStatus, newOrderStatus, shouldReduceStock, shouldClearCart, shouldRefundStock, order, svcErr := h.paymentSvc.ProcessMidtransNotification(ctx, notificationPayload)
+	if svcErr != nil {
+		log.Printf("ERROR: PaymentService failed to process Midtrans notification for OrderID %s: %v", notificationPayload.OrderID, svcErr)
+		http.Error(w, svcErr.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if order == nil {
+		log.Printf("WARNING: Order %s not found in database after PaymentService processing.", notificationPayload.OrderID)
+		http.Error(w, "Order not found after status processing", http.StatusNotFound)
+		return
+	}
+
+	txErr := h.db.Transaction(func(tx *gorm.DB) error {
+
+		if shouldReduceStock {
+
+			for _, item := range order.OrderItems {
+				product, err := h.productRepo.GetByID(ctx, item.ProductID)
+				if err != nil {
+					log.Printf("WARNING: Failed to get product %s for stock reduction: %v", item.ProductID, err)
+
+					return fmt.Errorf("product %s not found during stock reduction: %w", item.ProductID, err)
+				}
+				if product != nil {
+					if product.Stock < item.Qty {
+						log.Printf("CRITICAL: Insufficient stock for product %s (ID: %s) during reduction. Current: %d, Ordered: %d. Rolling back transaction.", product.Name, product.ID, product.Stock, item.Qty)
+						return fmt.Errorf("insufficient stock for product %s. Current: %d, Ordered: %d", product.Name, product.Stock, item.Qty)
+					}
+					if err := h.productRepo.UpdateStock(ctx, tx, product.ID, product.Stock-item.Qty); err != nil {
+						return fmt.Errorf("failed to reduce stock for product %s: %w", product.Name, err)
+					}
+				}
+			}
+		} else if shouldRefundStock {
+
+			for _, item := range order.OrderItems {
+				product, err := h.productRepo.GetByID(ctx, item.ProductID)
+				if err != nil {
+					log.Printf("WARNING: Failed to get product %s for stock refund: %v", item.ProductID, err)
+					continue
+				}
+				if product != nil {
+					if err := h.productRepo.UpdateStock(ctx, tx, product.ID, product.Stock+item.Qty); err != nil {
+						return fmt.Errorf("failed to refund stock for product %s: %w", product.Name, err)
+					}
+					log.Printf("Stock refunded for product %s (ID: %s). New stock: %d", product.Name, product.ID, product.Stock+item.Qty)
+				}
+			}
+		}
+
+		if shouldClearCart {
+
+			if order.UserID != "" {
+				cart, err := h.cartRepo.GetCartByUserID(ctx, order.UserID)
+				if err != nil {
+					log.Printf("ERROR: Failed to find cart for user %s associated with order %s for clearing: %v", order.UserID, order.ID, err)
+					return fmt.Errorf("failed to find cart for clearing: %w", err)
+				}
+				if cart != nil {
+
+					if err := h.cartItemRepo.DeleteAllItemsByCartID(ctx, tx, cart.ID); err != nil {
+						return fmt.Errorf("failed to delete cart items for cart %s: %w", cart.ID, err)
+					}
+
+					if err := h.cartRepo.UpdateCartTotalPrice(ctx, tx, cart.ID, decimal.Zero, decimal.Zero, decimal.Zero, decimal.Zero, decimal.Zero, 0); err != nil {
+						return fmt.Errorf("failed to reset cart totals for cart %s: %w", cart.ID, err)
+					}
+
+					helpers.ClearCartIDFromSession(w, r, h.sessionStore)
+				} else {
+					log.Printf("INFO: No active cart found for user %s associated with order %s to clear. Possibly a guest checkout or cart already cleared.", order.UserID, order.OrderCode)
+				}
+			} else {
+				log.Printf("WARNING: UserID not found for Order %s. Cannot clear cart for anonymous user.", order.OrderCode)
+			}
+		}
+		return nil
+	})
+
+	if txErr != nil {
+		log.Printf("ERROR during Midtrans notification (stock/cart ops) transaction for OrderID %s: %v", order.ID, txErr)
+
+		http.Error(w, "Internal server error during stock/cart processing", http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("SUCCESS: Order %s and Payment updated to PaymentStatus: %s, OrderStatus: %d. Stock Reduced: %t, Stock Refunded: %t, Cart Cleared: %t", order.ID, newPaymentStatus, newOrderStatus, shouldReduceStock, shouldRefundStock, shouldClearCart)
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("Notification received and processed"))
+}
+
+func (h *KomerceCheckoutHandler) CheckoutFinishGet(w http.ResponseWriter, r *http.Request) {
+	orderID := r.URL.Query().Get("order_id")
+	if orderID == "" {
+		http.Redirect(w, r, "/carts?status=error&message=Order ID tidak ditemukan.", http.StatusSeeOther)
+		return
+	}
+
+	ctx := r.Context()
+	order, err := h.orderRepo.FindByCode(ctx, orderID)
+	if err != nil || order == nil {
+		log.Printf("CheckoutFinishGet: Order %s tidak ditemukan: %v", orderID, err)
+		http.Redirect(w, r, fmt.Sprintf("/carts?status=error&message=%s", url.QueryEscape("Pesanan tidak ditemukan.")), http.StatusSeeOther)
+		return
+	}
+
+	pageData := other.BasePageData{}
+	baseDataMap := helpers.GetBaseData(r, nil)
+	helpers.PopulateBaseData(&pageData, baseDataMap)
+	pageData.Title = "Pembayaran Berhasil"
+	pageData.Message = fmt.Sprintf("Pembayaran untuk pesanan Anda #%s berhasil diproses! Terima kasih telah berbelanja.", order.OrderCode)
+	pageData.MessageStatus = "success"
+
+	h.render.HTML(w, http.StatusOK, "checkout/finish", pageData)
+}
+
+func (h *KomerceCheckoutHandler) CheckoutUnfinishGet(w http.ResponseWriter, r *http.Request) {
+	orderID := r.URL.Query().Get("order_id")
+	if orderID == "" {
+		http.Redirect(w, r, "/carts?status=error&message=Order ID tidak ditemukan.", http.StatusSeeOther)
+		return
+	}
+
+	pageData := other.BasePageData{}
+	baseDataMap := helpers.GetBaseData(r, nil)
+	helpers.PopulateBaseData(&pageData, baseDataMap)
+	pageData.Title = "Pembayaran Belum Selesai"
+	pageData.Message = fmt.Sprintf("Pembayaran untuk pesanan Anda #%s belum selesai. Silakan coba lagi atau hubungi dukungan.", orderID)
+	pageData.MessageStatus = "warning"
+
+	pageData.OrderID = orderID
+
+	h.render.HTML(w, http.StatusOK, "checkout/unfinish", pageData)
+}
+
+func (h *KomerceCheckoutHandler) CheckoutErrorGet(w http.ResponseWriter, r *http.Request) {
+	orderID := r.URL.Query().Get("order_id")
+	errorMessage := r.URL.Query().Get("message")
+
+	pageData := other.BasePageData{}
+	baseDataMap := helpers.GetBaseData(r, nil)
+	helpers.PopulateBaseData(&pageData, baseDataMap)
+	pageData.Title = "Error Pembayaran"
+	if orderID != "" {
+		pageData.Message = fmt.Sprintf("Terjadi kesalahan saat memproses pesanan #%s. %s", orderID, errorMessage)
+	} else {
+		pageData.Message = fmt.Sprintf("Terjadi kesalahan saat memproses pembayaran. %s", errorMessage)
+	}
+	pageData.MessageStatus = "error"
+
+	h.render.HTML(w, http.StatusOK, "checkout_error", pageData)
+}

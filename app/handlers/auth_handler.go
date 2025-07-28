@@ -170,6 +170,10 @@ func (h *AuthHandler) RegisterGetHandler(w http.ResponseWriter, r *http.Request)
 		"MessageStatus": r.URL.Query().Get("status"),
 		"Message":       r.URL.Query().Get("message"),
 		"IsAuthPage":    true,
+		"FirstName":     r.URL.Query().Get("firstname"),
+		"LastName":      r.URL.Query().Get("lastname"),
+		"Email":         r.URL.Query().Get("email"),
+		"Phone":         r.URL.Query().Get("phone"),
 	}
 
 	data := helpers.GetBaseData(r, pageSpecificData)
@@ -235,8 +239,6 @@ func (h *AuthHandler) RegisterPostHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	log.Printf("RegisterPostHandler: User %s (%s) registered successfully.", user.Email, user.ID)
-
 	newCart, err := h.cartRepo.GetOrCreateCartByUserID(r.Context(), "", user.ID)
 	if err != nil {
 		log.Printf("RegisterPostHandler: Failed to create cart for new user %s: %v", user.ID, err)
@@ -262,7 +264,6 @@ func (h *AuthHandler) LogoutHandler(w http.ResponseWriter, r *http.Request) {
 
 	helpers.ClearCookie(w, helpers.RememberMeCookieName)
 
-	log.Printf("LogoutHandler: User %s successfully logged out.", userID)
 	http.Redirect(w, r, "/?status=success&message=Anda%20telah%20berhasil%20logout.", http.StatusSeeOther)
 }
 
@@ -341,8 +342,6 @@ func (h *AuthHandler) ForgotPasswordPostHandler(w http.ResponseWriter, r *http.R
 		http.Redirect(w, r, fmt.Sprintf("/forgot-password?status=success&message=%s", url.QueryEscape("Jika email Anda terdaftar, kode verifikasi telah dikirimkan. Silakan cek email Anda (mungkin di folder spam).")), http.StatusSeeOther)
 		return
 	}
-
-	log.Printf("ForgotPasswordPostHandler: Kode OTP berhasil dikirim ke %s. OTP: %s", user.Email, otpCode)
 
 	http.Redirect(w, r, fmt.Sprintf("/verify-otp?email=%s&status=success&message=%s", url.QueryEscape(emailAddress), url.QueryEscape("Kode verifikasi telah dikirimkan. Silakan masukkan di bawah.")), http.StatusSeeOther)
 }
@@ -522,8 +521,6 @@ func (h *AuthHandler) VerifyOTPPostHandler(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	log.Printf("VerifyOTPPostHandler: OTP verified for user %s. Redirecting to reset password with session token: %s", user.ID, resetSessionToken)
-
 	http.Redirect(w, r, fmt.Sprintf("/reset-password?token=%s", resetSessionToken), http.StatusSeeOther)
 }
 
@@ -670,6 +667,5 @@ func (h *AuthHandler) UpdateProfilePost(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	log.Printf("data update:%v", user)
 	http.Redirect(w, r, "/profile?status=success&message=Profil%20berhasil%20diperbarui", http.StatusSeeOther)
 }

@@ -79,7 +79,6 @@ func (h *AdminHandler) AddCategoryPost(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Gagal mengambil/membuat default section: %v", secErr)
 
 	}
-	log.Printf("Section terpilih: ID=%s, Slug=%s", section.ID, section.Slug)
 
 	var data AdminCategoryPageData
 	data.IsAdminPage = true

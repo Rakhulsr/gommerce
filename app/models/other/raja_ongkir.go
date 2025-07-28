@@ -26,7 +26,7 @@ type SingleProvinceResponse struct {
 			Code        int    `json:"code"`
 			Description string `json:"description"`
 		} `json:"status"`
-		Results Province `json:"results"` // KOREKSI: Ini adalah objek Province tunggal
+		Results Province `json:"results"`
 	} `json:"rajaongkir"`
 }
 type City struct {
@@ -56,7 +56,7 @@ type SingleCityResponse struct {
 			Code        int    `json:"code"`
 			Description string `json:"description"`
 		} `json:"status"`
-		Results City `json:"results"` // KOREKSI: Ini adalah objek City tunggal
+		Results City `json:"results"`
 	} `json:"rajaongkir"`
 }
 

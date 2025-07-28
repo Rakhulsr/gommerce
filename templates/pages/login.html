@@ -1,12 +1,21 @@
 {{ define "auth/login" }}
 
 <div class="bg-white p-10 rounded-2xl shadow-xl w-full text-center 
-            transform transition-all duration-300 ease-in-out 
-            hover:scale-105 hover:shadow-2xl">
+            ">
     
     <h2 class="text-3xl font-bold text-gray-800 mb-10">Login</h2>
 
+    {{ if .Message }}
+    <div class="p-4 mb-4 text-sm rounded-lg 
+        {{ if eq .MessageStatus "success" }}bg-green-100 text-green-800
+        {{ else if eq .MessageStatus "error" }}bg-red-100 text-red-800
+        {{ else }}bg-blue-100 text-blue-800{{ end }}" role="alert">
+        {{ .Message }}
+    </div>
+    {{ end }}
+
     <form action="/login" method="POST" class="space-y-7">
+
         <div>
             <label for="email" class="sr-only">Email</label>
             <input type="email" id="email" name="email" placeholder="Alamat Email Anda" required
@@ -43,4 +52,3 @@
     </p>
 </div>
 {{ end }}
-

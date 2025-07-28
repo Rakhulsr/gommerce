@@ -177,7 +177,7 @@ func (r *gormOrderRepository) GetOrderCount(ctx context.Context) (int64, error) 
 		log.Printf("OrderRepository.GetOrderCount: Failed to count orders: %v", err)
 		return 0, fmt.Errorf("failed to count orders: %w", err)
 	}
-	log.Printf("OrderRepository.GetOrderCount: Total orders counted: %d", count)
+
 	return count, nil
 }
 
@@ -191,6 +191,6 @@ func (r *gormOrderRepository) GetRecentOrders(ctx context.Context, limit int) ([
 		log.Printf("OrderRepository.GetRecentOrders: Failed to retrieve recent orders: %v", err)
 		return nil, fmt.Errorf("failed to retrieve recent orders: %w", err)
 	}
-	log.Printf("OrderRepository.GetRecentOrders: Retrieved %d recent orders.", len(orders))
+
 	return orders, nil
 }

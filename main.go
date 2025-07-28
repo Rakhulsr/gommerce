@@ -4,10 +4,8 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
-	"os"
 	"time"
 
-	"github.com/Rakhulsr/go-ecommerce/app/cmd"
 	"github.com/Rakhulsr/go-ecommerce/app/configs"
 	"github.com/Rakhulsr/go-ecommerce/app/routes"
 	"github.com/midtrans/midtrans-go"
@@ -31,18 +29,7 @@ func init() {
 
 func main() {
 
-	env := configs.LoadEnv()
-	if len(os.Args) > 1 {
-		cmd.RunCli()
-		return
-	}
-
 	rand.Seed(time.Now().UnixNano())
-
-	log.Printf("Loaded API_ONGKIR_KEY_KOMERCE: '%s'", env.API_ONGKIR_KEY_KOMERCE)
-	if env.API_ONGKIR_KEY_KOMERCE == "" {
-		log.Fatalf("API_ONGKIR_KEY_KOMERCE is empty! Please check your .env file.")
-	}
 
 	db, err := configs.OpenConnection()
 	if err != nil {
@@ -50,7 +37,6 @@ func main() {
 
 	}
 	log.Println("✅ Database connected.")
-
 	log.Println("✅ Session store initialized.")
 	router := routes.NewRouter(db)
 

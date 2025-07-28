@@ -34,13 +34,12 @@ func AuthAndCartSessionMiddleware(userRepo repositories.UserRepositoryImpl, cart
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ctx := r.Context()
-			currentUserID := sessionStore.GetUserID(w, r) // Mengambil userID dari sesi
+			currentUserID := sessionStore.GetUserID(w, r)
 
 			var activeUserID string
 			var activeCartID string
 			var loggedInUser *models.User
 
-			// --- Bagian Autentikasi Pengguna (biarkan seperti yang Anda miliki) ---
 			if currentUserID != "" {
 				user, err := userRepo.FindByID(ctx, currentUserID)
 				if err != nil || user == nil {
@@ -58,7 +57,7 @@ func AuthAndCartSessionMiddleware(userRepo repositories.UserRepositoryImpl, cart
 					}
 				}
 			} else {
-				// Handle remember me token if user not logged in via session
+
 				rememberTokenFromCookie, err := helpers.GetCookie(r, helpers.RememberMeCookieName)
 				if err == nil && rememberTokenFromCookie != "" {
 					selector, verifier, splitErr := helpers.SplitRememberToken(rememberTokenFromCookie)
@@ -90,26 +89,22 @@ func AuthAndCartSessionMiddleware(userRepo repositories.UserRepositoryImpl, cart
 				}
 			}
 
-			// --- Bagian Manajemen Keranjang (Perbaikan di sini) ---
-			// Hanya proses keranjang jika ada activeUserID
 			if activeUserID != "" {
-				// Ambil cartID dari sesi. Ini adalah nilai yang paling up-to-date
+
 				cartIDFromSession := sessionStore.GetCartID(w, r)
 
-				// Gunakan GetOrCreateCartByUserID untuk memastikan cart ada dan ID-nya valid
-				// Kita meneruskan cartIDFromSession sebagai hint, dan activeUserID sebagai pemilik
 				cart, err := cartRepo.GetOrCreateCartByUserID(ctx, cartIDFromSession, activeUserID)
 				if err != nil {
 					log.Printf("AuthAndCartSessionMiddleware: Failed to get or create cart for user %s: %v", activeUserID, err)
-					// Jika ada error, pastikan activeCartID kosong
+
 					activeCartID = ""
-					// Hapus cartID dari sesi jika ada masalah
+
 					if cartIDFromSession != "" {
 						sessionStore.ClearCartID(w, r)
 					}
 				} else if cart != nil {
 					activeCartID = cart.ID
-					// Pastikan cartID di sesi selalu sesuai dengan cart yang ditemukan/dibuat
+
 					if cartIDFromSession != activeCartID {
 						if err := sessionStore.SetCartID(w, r, activeCartID); err != nil {
 							log.Printf("AuthAndCartSessionMiddleware: Failed to set cart ID %s in session: %v", activeCartID, err)
@@ -117,7 +112,7 @@ func AuthAndCartSessionMiddleware(userRepo repositories.UserRepositoryImpl, cart
 					}
 					log.Printf("AuthAndCartSessionMiddleware: CartID '%s' set in context for user '%s'.", activeCartID, activeUserID)
 				} else {
-					// Ini seharusnya tidak terjadi jika GetOrCreateCartByUserID selalu mengembalikan cart atau error
+
 					activeCartID = ""
 					if cartIDFromSession != "" {
 						sessionStore.ClearCartID(w, r)
@@ -125,15 +120,14 @@ func AuthAndCartSessionMiddleware(userRepo repositories.UserRepositoryImpl, cart
 					log.Printf("AuthAndCartSessionMiddleware: Cart is nil after GetOrCreateCartByUserID for user '%s'.", activeUserID)
 				}
 			} else {
-				// Jika tidak ada activeUserID (user tidak login), pastikan cartID di sesi dihapus
+
 				if sessionStore.GetCartID(w, r) != "" {
 					sessionStore.ClearCartID(w, r)
 					log.Printf("AuthAndCartSessionMiddleware: User not logged in, clearing cart_id from session.")
 				}
-				activeCartID = "" // Pastikan cartID di konteks juga kosong
+				activeCartID = ""
 			}
 
-			// --- Bagian Redirect (biarkan seperti yang Anda miliki) ---
 			requestPath := r.URL.Path
 			requiresLoginPaths := []string{
 				"/carts", "/carts/add", "/checkout", "/carts/delete", "/profile", "/addresses", "/orders", "/payment", "/shipment",
@@ -155,7 +149,6 @@ func AuthAndCartSessionMiddleware(userRepo repositories.UserRepositoryImpl, cart
 				return
 			}
 
-			// Set nilai akhir ke konteks
 			ctx = context.WithValue(ctx, helpers.ContextKeyUserID, activeUserID)
 			ctx = context.WithValue(ctx, helpers.ContextKeyCartID, activeCartID)
 			ctx = context.WithValue(ctx, helpers.ContextKeyUser, loggedInUser)
@@ -165,14 +158,10 @@ func AuthAndCartSessionMiddleware(userRepo repositories.UserRepositoryImpl, cart
 	}
 }
 
-// app/middlewares/cart_count_middleware.go (hanya fungsi ini)
-
 func CartCountMiddleware(cartRepo repositories.CartRepositoryImpl) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			log.Printf("CartCountMiddleware: Processing request for path: %s", r.URL.Path)
 
-			// Ambil CartID dari konteks yang sudah diisi oleh AuthAndCartSessionMiddleware
 			cartID, ok := r.Context().Value(helpers.ContextKeyCartID).(string)
 			if !ok || cartID == "" {
 				log.Printf("CartCountMiddleware: CartID NOT found or empty in context for %s. Setting count to 0.", r.URL.Path)
@@ -180,10 +169,6 @@ func CartCountMiddleware(cartRepo repositories.CartRepositoryImpl) func(http.Han
 				next.ServeHTTP(w, r.WithContext(ctx))
 				return
 			}
-
-			log.Printf("CartCountMiddleware: Found CartID '%s' in context for path: %s", cartID, r.URL.Path)
-
-			// Ambil cart DENGAN ITEMNYA untuk memastikan TotalItems akurat
 			cart, err := cartRepo.GetCartWithItems(r.Context(), cartID)
 			if err != nil {
 				log.Printf("CartCountMiddleware: Error getting cart with items for cartID '%s': %v. Setting count to 0.", cartID, err)
@@ -199,14 +184,8 @@ func CartCountMiddleware(cartRepo repositories.CartRepositoryImpl) func(http.Han
 				return
 			}
 
-			// PENTING: Panggil CalculateTotals untuk memastikan TotalItems selalu diperbarui
-			// sebelum digunakan oleh middleware atau dikirim ke frontend.
-			// Ini akan menghitung ulang TotalItems berdasarkan CartItems yang dimuat.
 			cart.CalculateTotals(calc.GetTaxPercent())
-
 			count := cart.TotalItems
-			log.Printf("CartCountMiddleware: CartID '%s' has TotalItems: %d. Setting count in context.", cartID, count)
-
 			ctx := context.WithValue(r.Context(), helpers.CartCountKey, count)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
@@ -247,8 +226,8 @@ func ContentSecurityPolicyMiddleware(next http.Handler) http.Handler {
 			"connect-src 'self' https://app.sandbox.midtrans.com https://api.sandbox.midtrans.com https://snap.midtrans.com https://snap.i.b-id-ca-eks-01.gopay.sh;" +
 			"frame-src https://app.sandbox.midtrans.com;" +
 			"img-src 'self' data: https://app.sandbox.midtrans.com;" +
-			"style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com;" + // Tambahkan Font Awesome di sini
-			"font-src 'self' https://cdnjs.cloudflare.com;" + // Tambahkan Font Awesome di sini
+			"style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com;" +
+			"font-src 'self' https://cdnjs.cloudflare.com;" +
 			"object-src 'none'; " +
 			"base-uri 'self';"
 

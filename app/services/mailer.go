@@ -50,7 +50,6 @@ func (m *Mailer) SendHTMLEmail(to, subject, htmlBody string) error {
 		return fmt.Errorf("gagal mengirim email HTML: %w", err)
 	}
 
-	log.Printf("Email HTML berhasil dikirim ke %s", to)
 	return nil
 }
 

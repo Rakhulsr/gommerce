@@ -35,6 +35,8 @@ const (
 	CSRFTokenKey         contextKey = "csrfToken"
 	ContextKeyIsLoggedIn contextKey = "isLoggedIn"
 	ContextKeyUserRole   contextKey = "userRole"
+
+	// isLoggedIn
 )
 
 func GetTemplateFunctions() template.FuncMap {
@@ -91,7 +93,7 @@ func ClearCartIDFromSession(w http.ResponseWriter, r *http.Request, sessionStore
 	if err != nil {
 		log.Printf("Error saving session after clearing cart ID: %v", err)
 	}
-	log.Println("CartID cleared from session.")
+
 }
 func FormatRupiah(amount float64) string {
 	return fmt.Sprintf("Rp %.0f", amount)
@@ -286,7 +288,6 @@ func GenerateResetToken() (string, time.Time, error) {
 func PasswordCompare(hashPass string, password []byte) bool {
 	err := bcrypt.CompareHashAndPassword([]byte(hashPass), password)
 	if err != nil {
-
 		log.Printf("PasswordCompare: password does not match or error: %v", err)
 		return false
 	}

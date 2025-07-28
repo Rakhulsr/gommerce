@@ -31,6 +31,7 @@ type ENV struct {
 	MIDTRANS_SERVER_KEY         string
 	APP_URL                     string
 	APP_ENV                     string
+	CRSFKEY                     string
 }
 
 func LoadEnv() ENV {
@@ -63,6 +64,7 @@ func LoadEnv() ENV {
 		API_ONGKIR_BASE_URL_KOMERCE: os.Getenv("API_ONGKIR_BASE_URL_KOMERCE"),
 		API_ONGKIR_KEY_KOMERCE:      os.Getenv("API_ONGKIR_KEY_KOMERCE"),
 		APP_ENV:                     os.Getenv("APP_ENV"),
+		CRSFKEY:                     os.Getenv("CRSFKEY"),
 	}
 
 }

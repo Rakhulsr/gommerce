@@ -228,7 +228,6 @@ func (h *AdminHandler) applyGlobalDiscount(ctx context.Context, discountPercent 
 		}
 	}
 
-	log.Printf("applyGlobalDiscount: Global discount of %.2f%% applied to all products and cart summaries updated.", discountPercent)
 	return nil
 }
 

@@ -65,7 +65,6 @@ func (p *productRepository) GetByID(ctx context.Context, id string) (*models.Pro
 			log.Printf("ProductRepository.GetByID: Product with ID %s not found.", id)
 			return nil, nil
 		}
-		log.Printf("ProductRepository.GetByID: Error getting product by ID %s: %v", id, err)
 		return nil, err
 	}
 	return &product, nil
@@ -83,7 +82,7 @@ func (p *productRepository) GetBySlug(ctx context.Context, slug string) (*models
 			log.Printf("ProductRepository.GetBySlug: Product with slug %s not found.", slug)
 			return nil, nil
 		}
-		log.Printf("ProductRepository.GetBySlug: Error getting product by slug %s: %v", slug, err)
+
 		return nil, err
 	}
 	return &product, nil
@@ -202,7 +201,6 @@ func (p *productRepository) SearchProductsPaginated(ctx context.Context, keyword
 }
 
 func (p *productRepository) CreateProduct(ctx context.Context, product *models.Product) error {
-	log.Printf("ProductRepository.CreateProduct: Attempting to create product with ID: %s, Name: %s", product.ID, product.Name)
 	product.CreatedAt = time.Now()
 	product.UpdatedAt = time.Now()
 
@@ -212,7 +210,6 @@ func (p *productRepository) CreateProduct(ctx context.Context, product *models.P
 			log.Printf("ProductRepository.CreateProduct: Error creating product in DB: %v", err)
 			return fmt.Errorf("failed to create product: %w", err)
 		}
-		log.Printf("ProductRepository.CreateProduct: Product %s created successfully.", product.ID)
 
 		for i := range product.ProductImages {
 			product.ProductImages[i].ProductID = product.ID
@@ -246,10 +243,6 @@ func (p *productRepository) CreateProduct(ctx context.Context, product *models.P
 }
 
 func (r *productRepository) UpdateProduct(ctx context.Context, product *models.Product) error {
-	log.Printf("ProductRepository.UpdateProduct: === Memulai UpdateProduct untuk ID: %s ===", product.ID)
-	log.Printf("ProductRepository.UpdateProduct: Product object received: %+v", product)
-	log.Printf("ProductRepository.UpdateProduct: ProductImages slice length received: %d", len(product.ProductImages))
-
 	product.UpdatedAt = time.Now()
 
 	if product.ID == "" {
@@ -269,7 +262,6 @@ func (r *productRepository) UpdateProduct(ctx context.Context, product *models.P
 			log.Printf("ProductRepository.UpdateProduct: Error replacing categories for product %s: %v", product.ID, err)
 			return fmt.Errorf("failed to replace categories: %w", err)
 		}
-		log.Printf("ProductRepository.UpdateProduct: Categories replaced for product %s.", product.ID)
 
 		if len(product.ProductImages) > 0 {
 			log.Printf("ProductRepository.UpdateProduct: New image path provided in form.")
@@ -311,20 +303,17 @@ func (r *productRepository) UpdateProduct(ctx context.Context, product *models.P
 			log.Printf("ProductRepository.UpdateProduct: No new image path provided in form. Existing images (if any) will be retained.")
 		}
 
-		log.Printf("ProductRepository.UpdateProduct: === Komit transaksi untuk ID: %s ===", product.ID)
 		return nil
 	})
 }
 
 func (p *productRepository) DeleteProduct(ctx context.Context, id string) error {
-	log.Printf("ProductRepository.DeleteProduct: Attempting to delete product with ID: %s", id)
 	err := p.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 
 		if err := tx.Where("product_id = ?", id).Delete(&models.ProductImage{}).Error; err != nil {
 			log.Printf("ProductRepository.DeleteProduct: Error deleting product images for product %s: %v", id, err)
 			return fmt.Errorf("failed to delete product images: %w", err)
 		}
-		log.Printf("ProductRepository.DeleteProduct: Product images for product %s deleted.", id)
 
 		var product models.Product
 		product.ID = id
@@ -332,13 +321,11 @@ func (p *productRepository) DeleteProduct(ctx context.Context, id string) error 
 			log.Printf("ProductRepository.DeleteProduct: Error clearing categories association for product %s: %v", id, err)
 			return fmt.Errorf("failed to clear categories association: %w", err)
 		}
-		log.Printf("ProductRepository.DeleteProduct: Categories association for product %s cleared.", id)
 
 		if err := tx.Delete(&models.Product{}, "id = ?", id).Error; err != nil {
 			log.Printf("ProductRepository.DeleteProduct: Error deleting product %s from DB: %v", id, err)
 			return fmt.Errorf("failed to delete product: %w", err)
 		}
-		log.Printf("ProductRepository.DeleteProduct: Product %s deleted successfully.", id)
 		return nil
 	})
 
@@ -395,6 +382,6 @@ func (r *productRepository) GetProductCount(ctx context.Context) (int64, error) 
 		log.Printf("ProductRepository.GetProductCount: Failed to count products: %v", err)
 		return 0, fmt.Errorf("failed to count products: %w", err)
 	}
-	log.Printf("ProductRepository.GetProductCount: Total products counted: %d", count)
+
 	return count, nil
 }

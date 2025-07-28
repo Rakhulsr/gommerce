@@ -92,7 +92,6 @@ func (h *OrderHandler) OrderDetailGet(w http.ResponseWriter, r *http.Request) {
 
 	}
 
-	log.Printf("DEBUG: OrderDetailGet: Detail Pesanan %s untuk template:", order.OrderCode)
 	if order.OrderItems == nil || len(order.OrderItems) == 0 {
 		log.Printf("DEBUG: OrderDetailGet: OrderItems kosong atau nil untuk pesanan %s.", order.OrderCode)
 	} else {

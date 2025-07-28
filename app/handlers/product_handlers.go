@@ -123,20 +123,18 @@ func (h *ProductHandler) ProductDetail(w http.ResponseWriter, r *http.Request) {
 
 	product, err := h.repo.GetBySlug(r.Context(), productSlug)
 	if err != nil {
-		// Ini menangani error database yang sebenarnya
+
 		log.Printf("ProductDetail: Error fetching product by slug %s: %v", productSlug, err)
 		http.Error(w, "Gagal mengambil data produk", http.StatusInternalServerError)
 		return
 	}
 
-	// --- TAMBAHKAN INI ---
 	if product == nil {
-		// Produk tidak ditemukan oleh GetBySlug (karena mengembalikan nil, nil)
+
 		log.Printf("ProductDetail: Product with slug %s not found.", productSlug)
-		http.NotFound(w, r) // Mengembalikan status 404 Not Found
+		http.NotFound(w, r)
 		return
 	}
-	// --- END TAMBAHKAN INI ---
 
 	breadcrumbs := []breadcrumb.Breadcrumb{
 		{Name: "Home", URL: "/"},

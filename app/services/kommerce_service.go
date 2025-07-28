@@ -15,7 +15,6 @@ import (
 	"github.com/Rakhulsr/go-ecommerce/app/models/other"
 )
 
-// Global variables for in-memory caching (tetap ada sesuai strategi terakhir)
 var (
 	allDomesticDestinations      []other.KomerceDomesticDestination
 	domesticDestinationsMutex    sync.RWMutex
@@ -41,16 +40,13 @@ func NewKomerceRajaOngkirClient(apiKey string) KomerceRajaOngkirClient {
 	}
 }
 
-// doRequest helper function
 func (s *komerceRajaOngkirService) doRequest(ctx context.Context, method, fullPath string, bodyReader *bytes.Buffer, contentType string) ([]byte, error) {
 
 	fullURL := s.baseURL + fullPath
-	log.Printf("doRequest: Membuat request %s ke URL: %s dengan Content-Type: %s", method, fullURL, contentType)
 
-	// Pastikan bodyReader tidak nil, jika nil, gunakan bytes.NewBuffer(nil) atau http.NoBody
 	var reqBodyReader *bytes.Buffer
 	if bodyReader == nil {
-		reqBodyReader = bytes.NewBuffer(nil) // Gunakan buffer kosong jika bodyReader nil
+		reqBodyReader = bytes.NewBuffer(nil)
 	} else {
 		reqBodyReader = bodyReader
 	}
@@ -82,7 +78,6 @@ func (s *komerceRajaOngkirService) doRequest(ctx context.Context, method, fullPa
 	return respBody, nil
 }
 
-// CalculateCost (tidak ada perubahan)
 func (s *komerceRajaOngkirService) CalculateCost(ctx context.Context, originID, destinationID int, weight int, courier string) ([]other.KomerceCostDetail, error) {
 	formData := url.Values{}
 	formData.Add("origin", fmt.Sprintf("%d", originID))
@@ -113,7 +108,6 @@ func (s *komerceRajaOngkirService) CalculateCost(ctx context.Context, originID, 
 	return apiResponse.Data, nil
 }
 
-// SearchDomesticDestinations (PERBAIKAN PANGGILAN doRequest)
 func (s *komerceRajaOngkirService) SearchDomesticDestinations(ctx context.Context, query string, limit, offset int) ([]other.KomerceDomesticDestination, error) {
 	params := url.Values{}
 	params.Add("search", query)
@@ -122,7 +116,6 @@ func (s *komerceRajaOngkirService) SearchDomesticDestinations(ctx context.Contex
 
 	fullPath := fmt.Sprintf("/v1/destination/domestic-destination?%s", params.Encode())
 
-	// PERBAIKAN DI SINI: Berikan bytes.NewBuffer(nil) sebagai bodyReader untuk GET request
 	body, err := s.doRequest(ctx, "GET", fullPath, bytes.NewBuffer(nil), "application/json")
 	if err != nil {
 		return nil, err
