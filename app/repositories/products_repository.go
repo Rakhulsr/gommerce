@@ -2,9 +2,10 @@ package repositories
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -34,6 +35,7 @@ type ProductRepositoryImpl interface {
 	DecrementStock(ctx context.Context, tx *gorm.DB, productID string, quantity int) error
 	UpdateProductTx(ctx context.Context, tx *gorm.DB, product *models.Product) error
 	UpdateStock(ctx context.Context, tx *gorm.DB, productID string, newStock int) error
+	DeleteProductImage(ctx context.Context, imageID string) error
 }
 
 type productRepository struct {
@@ -206,29 +208,36 @@ func (p *productRepository) CreateProduct(ctx context.Context, product *models.P
 
 	err := p.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 
-		if err := tx.Create(product).Error; err != nil {
-			log.Printf("ProductRepository.CreateProduct: Error creating product in DB: %v", err)
+		if err := tx.Omit("Categories").Create(product).Error; err != nil {
+			log.Printf("ProductRepository.CreateProduct: Error creating product in DB (omitting categories): %v", err)
 			return fmt.Errorf("failed to create product: %w", err)
 		}
-
-		for i := range product.ProductImages {
-			product.ProductImages[i].ProductID = product.ID
-
-			product.ProductImages[i].ID = uuid.New().String()
-
-			if err := tx.Create(&product.ProductImages[i]).Error; err != nil {
-				log.Printf("ProductRepository.CreateProduct: Error creating product image %d for product %s (ImageID: %s): %v", i, product.ID, product.ProductImages[i].ID, err)
-				return fmt.Errorf("failed to create product image: %w", err)
-			}
-			log.Printf("ProductRepository.CreateProduct: Product image %s created for product %s.", product.ProductImages[i].ID, product.ID)
-		}
+		log.Printf("ProductRepository.CreateProduct: Product created successfully (without categories): ID=%s, Name=%s", product.ID, product.Name)
 
 		if len(product.Categories) > 0 {
-			if err := tx.Model(product).Association("Categories").Append(product.Categories); err != nil {
-				log.Printf("ProductRepository.CreateProduct: Error appending categories for product %s: %v", product.ID, err)
-				return fmt.Errorf("failed to associate categories: %w", err)
+			log.Printf("ProductRepository.CreateProduct: Manually appending categories for product ID: %s. Categories count: %d", product.ID, len(product.Categories))
+
+			for i, cat := range product.Categories {
+				log.Printf("ProductRepository.CreateProduct: Category to append [%d]: ID=%s, Name=%s", i, cat.ID, cat.Name)
+				if cat.ID == "" {
+					log.Printf("ProductRepository.CreateProduct: WARNING! Category at index %d has an empty ID.", i)
+					return fmt.Errorf("kategori memiliki ID kosong")
+				}
+
+				productCategory := models.ProductCategory{
+					ProductID:  product.ID,
+					CategoryID: cat.ID,
+					CreatedAt:  time.Now(),
+					UpdatedAt:  time.Now(),
+				}
+				if err := tx.Create(&productCategory).Error; err != nil {
+					log.Printf("ProductRepository.CreateProduct: Error creating product category entry for ProductID %s, CategoryID %s: %v", product.ID, cat.ID, err)
+					return fmt.Errorf("gagal mengasosiasikan kategori secara manual: %w", err)
+				}
+				log.Printf("ProductRepository.CreateProduct: Category %s associated with product %s.", cat.ID, product.ID)
 			}
-			log.Printf("ProductRepository.CreateProduct: Categories appended for product %s.", product.ID)
+		} else {
+			log.Printf("ProductRepository.CreateProduct: No categories to append for product %s.", product.ID)
 		}
 
 		return nil
@@ -243,96 +252,194 @@ func (p *productRepository) CreateProduct(ctx context.Context, product *models.P
 }
 
 func (r *productRepository) UpdateProduct(ctx context.Context, product *models.Product) error {
-	product.UpdatedAt = time.Now()
+	tx := r.db.WithContext(ctx).Begin()
+	if tx.Error != nil {
+		return tx.Error
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+			log.Printf("UpdateProduct [ERROR]: Recovered from panic: %v", r)
+		}
+	}()
 
-	if product.ID == "" {
-		log.Printf("ProductRepository.UpdateProduct: ERROR: Product ID is empty.")
-		return fmt.Errorf("product ID is empty for update")
+	if err := tx.Omit("Categories", "ProductImages").Save(product).Error; err != nil {
+		tx.Rollback()
+		return fmt.Errorf("gagal memperbarui data produk dasar: %w", err)
 	}
 
-	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	if product.Categories == nil {
+		product.Categories = []models.Category{}
 
-		if err := tx.Save(product).Error; err != nil {
-			log.Printf("ProductRepository.UpdateProduct: Error saving product %s in DB: %v", product.ID, err)
-			return fmt.Errorf("failed to save product: %w", err)
+	}
+
+	if err := tx.Where("product_id = ?", product.ID).Delete(&models.ProductCategory{}).Error; err != nil {
+		tx.Rollback()
+		return fmt.Errorf("gagal menghapus kategori lama untuk produk: %w", err)
+	}
+
+	if len(product.Categories) > 0 {
+		var newProductCategories []models.ProductCategory
+		for _, cat := range product.Categories {
+			newProductCategories = append(newProductCategories, models.ProductCategory{
+				ProductID:  product.ID,
+				CategoryID: cat.ID,
+			})
 		}
-		log.Printf("ProductRepository.UpdateProduct: Product %s saved successfully (basic fields).", product.ID)
-
-		if err := tx.Model(product).Association("Categories").Replace(product.Categories); err != nil {
-			log.Printf("ProductRepository.UpdateProduct: Error replacing categories for product %s: %v", product.ID, err)
-			return fmt.Errorf("failed to replace categories: %w", err)
+		if err := tx.CreateInBatches(newProductCategories, 100).Error; err != nil {
+			tx.Rollback()
+			return fmt.Errorf("gagal menambahkan kategori baru ke produk: %w", err)
 		}
 
-		if len(product.ProductImages) > 0 {
-			log.Printf("ProductRepository.UpdateProduct: New image path provided in form.")
-			newImage := product.ProductImages[0]
+	}
 
-			var existingImage models.ProductImage
-			result := tx.Where("product_id = ?", product.ID).First(&existingImage)
+	if product.ProductImages == nil {
+		product.ProductImages = []models.ProductImage{}
+	}
 
-			if result.Error != nil && !errors.Is(result.Error, gorm.ErrRecordNotFound) {
-				log.Printf("ProductRepository.UpdateProduct: Error checking for existing image for product %s: %v", product.ID, result.Error)
-				return fmt.Errorf("failed to check existing product image: %w", result.Error)
-			}
+	var existingDBImages []models.ProductImage
+	if err := tx.Where("product_id = ?", product.ID).Find(&existingDBImages).Error; err != nil {
+		tx.Rollback()
+		return fmt.Errorf("gagal mengambil gambar produk yang sudah ada dari DB: %w", err)
+	}
 
-			if errors.Is(result.Error, gorm.ErrRecordNotFound) {
-				log.Printf("ProductRepository.UpdateProduct: No existing image found for product %s, creating new one.", product.ID)
-				newImage.ID = uuid.New().String()
-				newImage.ProductID = product.ID
-				if err := tx.Create(&newImage).Error; err != nil {
-					log.Printf("ProductRepository.UpdateProduct: Error creating new product image %s for product %s: %v", newImage.ID, product.ID, err)
-					return fmt.Errorf("failed to create new product image: %w", err)
+	retainedImageIDsMap := make(map[string]bool)
+	for _, img := range product.ProductImages {
+		if img.ID != "" {
+			retainedImageIDsMap[img.ID] = true
+		}
+	}
+
+	var imagesToDeleteFromDB []models.ProductImage
+	for _, dbImg := range existingDBImages {
+		if _, found := retainedImageIDsMap[dbImg.ID]; !found {
+			imagesToDeleteFromDB = append(imagesToDeleteFromDB, dbImg)
+		}
+	}
+
+	if len(imagesToDeleteFromDB) > 0 {
+		var idsToDelete []string
+		for _, img := range imagesToDeleteFromDB {
+			idsToDelete = append(idsToDelete, img.ID)
+
+			if img.Path != "" {
+
+				fullPath := filepath.Join("static", img.Path)
+				if _, err := os.Stat(fullPath); os.IsNotExist(err) {
+					log.Printf("UpdateProduct [INFO]: Gagal menghapus file fisik %s (tidak ditemukan), mungkin sudah dihapus.", fullPath)
+				} else if err := os.Remove(fullPath); err != nil {
+					log.Printf("UpdateProduct [ERROR]: Gagal menghapus file fisik %s: %v", fullPath, err)
+
+				} else {
+					log.Printf("UpdateProduct [INFO]: Berhasil menghapus file fisik: %s", fullPath)
 				}
-				log.Printf("ProductRepository.UpdateProduct: New product image %s created for product %s.", newImage.ID, product.ID)
 			} else {
-				log.Printf("ProductRepository.UpdateProduct: Existing image found (%s) for product %s, updating it.", existingImage.ID, product.ID)
-				existingImage.Path = newImage.Path
-				existingImage.ExtraLarge = newImage.ExtraLarge
-				existingImage.Large = newImage.Large
-				existingImage.Medium = newImage.Medium
-				existingImage.Small = newImage.Small
-				existingImage.UpdatedAt = time.Now()
-
-				if err := tx.Save(&existingImage).Error; err != nil {
-					log.Printf("ProductRepository.UpdateProduct: Error updating existing product image %s for product %s: %v", existingImage.ID, product.ID, err)
-					return fmt.Errorf("failed to update existing product image: %w", err)
-				}
-				log.Printf("ProductRepository.UpdateProduct: Existing product image %s updated for product %s.", existingImage.ID, product.ID)
+				log.Printf("UpdateProduct [WARNING]: Path gambar kosong untuk gambar ID %s, tidak dapat menghapus file fisik.", img.ID)
 			}
-		} else {
-			log.Printf("ProductRepository.UpdateProduct: No new image path provided in form. Existing images (if any) will be retained.")
 		}
 
-		return nil
-	})
+		if err := tx.Where("id IN (?)", idsToDelete).Delete(&models.ProductImage{}).Error; err != nil {
+			tx.Rollback()
+			return fmt.Errorf("gagal menghapus gambar produk lama yang tidak dipertahankan dari DB: %w", err)
+		}
+		log.Printf("UpdateProduct [INFO]: Berhasil menghapus %d gambar lama dari DB untuk produk ID: %s. IDs: %+v", len(idsToDelete), product.ID, idsToDelete)
+	} else {
+		log.Printf("UpdateProduct [INFO]: Tidak ada gambar lama yang perlu dihapus dari DB untuk produk ID: %s", product.ID)
+	}
+
+	var newImagesToCreate []models.ProductImage
+	existingDBImageIDsMap := make(map[string]bool)
+	for _, img := range existingDBImages {
+		existingDBImageIDsMap[img.ID] = true
+	}
+
+	for _, img := range product.ProductImages {
+		if img.ID == "" {
+			img.ID = uuid.New().String()
+			img.CreatedAt = time.Now()
+			img.UpdatedAt = time.Now()
+			img.ProductID = product.ID
+			newImagesToCreate = append(newImagesToCreate, img)
+		} else {
+			if _, found := existingDBImageIDsMap[img.ID]; !found {
+				img.CreatedAt = time.Now()
+				img.UpdatedAt = time.Now()
+				img.ProductID = product.ID
+				newImagesToCreate = append(newImagesToCreate, img)
+
+			}
+		}
+	}
+
+	if len(newImagesToCreate) > 0 {
+		if err := tx.CreateInBatches(newImagesToCreate, 100).Error; err != nil {
+			tx.Rollback()
+			return fmt.Errorf("gagal menambahkan gambar produk baru ke DB: %w", err)
+		}
+		log.Printf("UpdateProduct [INFO]: Berhasil menambahkan %d gambar baru ke DB untuk produk ID: %s", len(newImagesToCreate), product.ID)
+	} else {
+		log.Printf("UpdateProduct [INFO]: Tidak ada gambar baru yang perlu ditambahkan ke DB untuk produk ID: %s", product.ID)
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		return fmt.Errorf("gagal melakukan commit transaksi update produk: %w", err)
+	}
+	log.Printf("UpdateProduct [INFO]: Transaksi update produk berhasil di-commit untuk ID: %s", product.ID)
+
+	return nil
 }
 
-func (p *productRepository) DeleteProduct(ctx context.Context, id string) error {
-	err := p.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-
-		if err := tx.Where("product_id = ?", id).Delete(&models.ProductImage{}).Error; err != nil {
-			log.Printf("ProductRepository.DeleteProduct: Error deleting product images for product %s: %v", id, err)
-			return fmt.Errorf("failed to delete product images: %w", err)
-		}
-
-		var product models.Product
-		product.ID = id
-		if err := tx.Model(&product).Association("Categories").Clear(); err != nil {
-			log.Printf("ProductRepository.DeleteProduct: Error clearing categories association for product %s: %v", id, err)
-			return fmt.Errorf("failed to clear categories association: %w", err)
-		}
-
-		if err := tx.Delete(&models.Product{}, "id = ?", id).Error; err != nil {
-			log.Printf("ProductRepository.DeleteProduct: Error deleting product %s from DB: %v", id, err)
-			return fmt.Errorf("failed to delete product: %w", err)
-		}
-		return nil
-	})
-
-	if err != nil {
-		log.Printf("ProductRepository.DeleteProduct: Transaction failed for product %s: %v", id, err)
+func (r *productRepository) DeleteProduct(ctx context.Context, id string) error {
+	tx := r.db.WithContext(ctx).Begin()
+	if tx.Error != nil {
+		return tx.Error
 	}
-	return err
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	var images []models.ProductImage
+	if err := tx.Where("product_id = ?", id).Find(&images).Error; err != nil {
+		log.Printf("DeleteProduct: Gagal mengambil gambar produk untuk ID %s (mungkin sudah dihapus): %v", id, err)
+	} else {
+		for _, img := range images {
+			fullPath := filepath.Join(".", img.Path)
+			if _, err := os.Stat(fullPath); os.IsNotExist(err) {
+				log.Printf("DeleteProduct: File gambar tidak ditemukan, mungkin sudah dihapus: %s", fullPath)
+			} else if err := os.Remove(fullPath); err != nil {
+				log.Printf("DeleteProduct: Gagal menghapus file fisik gambar %s: %v", fullPath, err)
+			} else {
+				log.Printf("DeleteProduct: Berhasil menghapus file fisik gambar: %s", fullPath)
+			}
+		}
+	}
+
+	if err := tx.Where("product_id = ?", id).Delete(&models.ProductCategory{}).Error; err != nil {
+		tx.Rollback()
+		return fmt.Errorf("gagal menghapus kategori produk terkait: %w", err)
+	}
+	log.Printf("DeleteProduct: Asosiasi kategori dihapus dari tabel join untuk produk ID: %s", id)
+
+	if err := tx.Where("product_id = ?", id).Delete(&models.ProductImage{}).Error; err != nil {
+		tx.Rollback()
+		return fmt.Errorf("gagal menghapus gambar produk dari database: %w", err)
+	}
+	log.Printf("DeleteProduct: Gambar produk dihapus dari database untuk produk ID: %s", id)
+
+	if err := tx.Delete(&models.Product{}, "id = ?", id).Error; err != nil {
+		tx.Rollback()
+		return fmt.Errorf("gagal menghapus produk: %w", err)
+	}
+	log.Printf("DeleteProduct: Produk %s berhasil dihapus dari database.", id)
+
+	if err := tx.Commit().Error; err != nil {
+		return fmt.Errorf("gagal melakukan commit transaksi delete produk: %w", err)
+	}
+	log.Printf("DeleteProduct: Transaksi committed untuk produk ID: %s", id)
+
+	return nil
 }
 
 func (r *productRepository) UpdateProductDiscount(ctx context.Context, productID string, discountPercent decimal.Decimal, discountAmount decimal.Decimal) error {
@@ -384,4 +491,22 @@ func (r *productRepository) GetProductCount(ctx context.Context) (int64, error) 
 	}
 
 	return count, nil
+}
+
+func (r *productRepository) DeleteProductImage(ctx context.Context, imageID string) error {
+	var productImage models.ProductImage
+	if err := r.db.WithContext(ctx).Where("id = ?", imageID).First(&productImage).Error; err != nil {
+		return fmt.Errorf("gambar produk tidak ditemukan: %w", err)
+	}
+
+	if err := r.db.WithContext(ctx).Delete(&productImage).Error; err != nil {
+		return fmt.Errorf("gagal menghapus record gambar dari database: %w", err)
+	}
+
+	fullPath := filepath.Join(".", productImage.Path)
+	if err := os.Remove(fullPath); err != nil {
+		log.Printf("DeleteProductImage: Gagal menghapus file fisik %s: %v", fullPath, err)
+
+	}
+	return nil
 }

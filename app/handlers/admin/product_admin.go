@@ -2,10 +2,15 @@ package admin
 
 import (
 	"fmt"
+	"io"
 	"log"
+	"mime/multipart"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/Rakhulsr/go-ecommerce/app/helpers"
@@ -16,6 +21,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	"github.com/shopspring/decimal"
+)
+
+const (
+	UploadDir = "./static/uploads/products/"
+	MaxImages = 3
 )
 
 func (h *AdminHandler) GetProductsPage(w http.ResponseWriter, r *http.Request) {
@@ -107,28 +117,28 @@ func (h *AdminHandler) AddProductPage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AdminHandler) AddProductPost(w http.ResponseWriter, r *http.Request) {
-	var form ProductForm
-	if err := r.ParseForm(); err != nil {
-		log.Printf("AddProductPost: Kesalahan parsing form: %v", err)
-		http.Redirect(w, r, fmt.Sprintf("/admin/products/add?status=error&message=%s", url.QueryEscape("Kesalahan parsing form.")), http.StatusSeeOther)
+
+	err := r.ParseMultipartForm(10 << 20)
+	if err != nil {
+		log.Printf("AddProductPost: Kesalahan parsing multipart form: %v", err)
+		http.Redirect(w, r, fmt.Sprintf("/admin/products/add?status=error&message=%s", url.QueryEscape("Kesalahan parsing form (ukuran file terlalu besar?).")), http.StatusSeeOther)
 		return
 	}
 
+	var form ProductForm
 	form.Name = r.PostFormValue("name")
 	form.Description = r.PostFormValue("description")
 	form.SKU = r.PostFormValue("sku")
 	form.Price = r.PostFormValue("price")
 	form.Stock = r.PostFormValue("stock")
 	form.Weight = r.PostFormValue("weight")
-	form.ImagePath = r.PostFormValue("image_path")
 	form.CategoryID = r.PostFormValue("category_id")
 	form.DiscountPercent = r.PostFormValue("discount_percent")
 
 	if err := h.validator.Struct(&form); err != nil {
 		validationErrors := err.(validator.ValidationErrors)
 		formattedErrors := helpers.FormatValidationErrors(validationErrors)
-
-		log.Printf("AddProductPost: Validasi form gagal: %v, Errors: %+v", err, formattedErrors)
+		log.Printf("AddProductPost: Validasi form GAGAL: %v, Errors: %+v", err, formattedErrors)
 
 		data := &AdminProductPageData{
 			FormAction:  "/admin/products/add",
@@ -137,22 +147,20 @@ func (h *AdminHandler) AddProductPost(w http.ResponseWriter, r *http.Request) {
 			Errors:      formattedErrors,
 		}
 		h.populateBaseDataForAdmin(r, data)
-
 		categories, catErr := h.categoryRepo.GetAll(r.Context())
+
 		if catErr != nil {
 			log.Printf("AddProductPost: Gagal mengambil kategori saat validasi gagal: %v", catErr)
 		}
-		data.Categories = categories
 
+		data.Categories = categories
 		data.Title = "Tambah Produk Baru"
 		data.IsAuthPage = true
 		data.IsAdminPage = true
 		data.HideAdminWelcomeMessage = true
 		data.Breadcrumbs = []breadcrumb.Breadcrumb{
-			{Name: "Beranda", URL: "/"},
-			{Name: "Admin", URL: "/admin/dashboard"},
-			{Name: "Produk", URL: "/admin/products"},
-			{Name: "Tambah Baru", URL: "/admin/products/add"},
+			{Name: "Beranda", URL: "/"}, {Name: "Admin", URL: "/admin/dashboard"},
+			{Name: "Produk", URL: "/admin/products"}, {Name: "Tambah Baru", URL: "/admin/products/add"},
 		}
 		h.render.HTML(w, http.StatusOK, "admin/products/form", data)
 		return
@@ -160,30 +168,27 @@ func (h *AdminHandler) AddProductPost(w http.ResponseWriter, r *http.Request) {
 
 	priceFloat, err := strconv.ParseFloat(form.Price, 64)
 	if err != nil {
-		log.Printf("AddProductPost: Format harga tidak valid: %v", err)
-		http.Redirect(w, r, fmt.Sprintf("/admin/products/add?status=error&message=%s", url.QueryEscape("Format harga tidak valid.")), http.StatusSeeOther)
+		h.handleFormError(w, r, "/admin/products/add", "Format harga tidak valid.", &form, nil)
 		return
 	}
 	price := decimal.NewFromFloat(priceFloat)
 
 	stock, err := strconv.Atoi(form.Stock)
 	if err != nil {
-		log.Printf("AddProductPost: Format stok tidak valid: %v", err)
-		http.Redirect(w, r, fmt.Sprintf("/admin/products/add?status=error&message=%s", url.QueryEscape("Format stok tidak valid.")), http.StatusSeeOther)
+		h.handleFormError(w, r, "/admin/products/add", "Format stok tidak valid.", &form, nil)
 		return
 	}
 
 	weightFloat, err := strconv.ParseFloat(form.Weight, 64)
 	if err != nil {
-		log.Printf("AddProductPost: Format berat tidak valid: %v", err)
-		http.Redirect(w, r, fmt.Sprintf("/admin/products/add?status=error&message=%s", url.QueryEscape("Format berat tidak valid.")), http.StatusSeeOther)
+		h.handleFormError(w, r, "/admin/products/add", "Format berat tidak valid.", &form, nil)
 		return
 	}
 	weight := decimal.NewFromFloat(weightFloat)
 
 	discountPercentFloat, err := strconv.ParseFloat(form.DiscountPercent, 64)
 	if err != nil {
-		log.Printf("EditProductPost: Format diskon tidak valid atau kosong, setting ke 0: %v", err)
+		log.Printf("AddProductPost: Format diskon tidak valid atau kosong, setting ke 0: %v", err)
 		discountPercentFloat = 0
 	}
 	discountPercent := decimal.NewFromFloat(discountPercentFloat)
@@ -192,15 +197,13 @@ func (h *AdminHandler) AddProductPost(w http.ResponseWriter, r *http.Request) {
 
 	category, err := h.categoryRepo.GetByID(r.Context(), form.CategoryID)
 	if err != nil || category == nil {
-		log.Printf("AddProductPost: Kategori tidak ditemukan atau error: %v, CategoryID: %s", err, form.CategoryID)
-		http.Redirect(w, r, fmt.Sprintf("/admin/products/add?status=error&message=%s", url.QueryEscape("Kategori tidak valid.")), http.StatusSeeOther)
+		h.handleFormError(w, r, "/admin/products/add", "Kategori tidak valid.", &form, nil)
 		return
 	}
 
 	userID, ok := r.Context().Value(helpers.ContextKeyUserID).(string)
 	if !ok || userID == "" {
-		log.Printf("AddProductPost: UserID tidak ditemukan di konteks. UserID: '%s', OK: %t", userID, ok)
-		http.Redirect(w, r, fmt.Sprintf("/admin/products/add?status=error&message=%s", url.QueryEscape("User admin tidak terautentikasi.")), http.StatusSeeOther)
+		h.handleFormError(w, r, "/admin/products/add", "User admin tidak terautentikasi.", &form, nil)
 		return
 	}
 
@@ -210,11 +213,11 @@ func (h *AdminHandler) AddProductPost(w http.ResponseWriter, r *http.Request) {
 	IsSkuExist, err := h.productRepo.IsSKUExists(r.Context(), form.SKU)
 	if err != nil {
 		log.Printf("AddProductPost: Gagal mengecek SKU unik: %v", err)
-		http.Redirect(w, r, fmt.Sprintf("/admin/products/add?status=error&message=%s", url.QueryEscape("Gagal mengecek SKU.")), http.StatusSeeOther)
+		h.handleFormError(w, r, "/admin/products/add", "Gagal mengecek SKU.", &form, nil)
 		return
 	}
 	if IsSkuExist {
-		http.Redirect(w, r, fmt.Sprintf("/admin/products/add?status=error&message=%s", url.QueryEscape("SKU sudah digunakan, gunakan yang lain.")), http.StatusSeeOther)
+		h.handleFormError(w, r, "/admin/products/add", "SKU sudah digunakan, gunakan yang lain.", &form, map[string]string{"sku": "SKU ini sudah ada."})
 		return
 	}
 
@@ -233,23 +236,37 @@ func (h *AdminHandler) AddProductPost(w http.ResponseWriter, r *http.Request) {
 	}
 	product.Categories = []models.Category{*category}
 
-	if form.ImagePath != "" {
-		product.ProductImages = []models.ProductImage{
-			{
-				ID:         uuid.New().String(),
-				Path:       form.ImagePath,
-				ExtraLarge: form.ImagePath,
-				Large:      form.ImagePath,
-				Medium:     form.ImagePath,
-				Small:      form.ImagePath,
-			},
-		}
+	files := r.MultipartForm.File["product_images"]
+	if len(files) > MaxImages {
+		h.handleFormError(w, r, "/admin/products/add", fmt.Sprintf("Anda hanya dapat mengunggah maksimal %d gambar.", MaxImages), &form, map[string]string{"product_images": fmt.Sprintf("Maksimal %d gambar.", MaxImages)})
+		return
 	}
+
+	var productImages []models.ProductImage
+	for _, fileHeader := range files {
+		log.Printf("AddProductPost: Memproses file: %s", fileHeader.Filename)
+		imagePath, err := h.saveProductImage(fileHeader)
+		if err != nil {
+			log.Printf("AddProductPost: Gagal menyimpan gambar: %v", err)
+			h.handleFormError(w, r, "/admin/products/add", "Gagal menyimpan salah satu gambar.", &form, nil)
+			return
+		}
+		productImages = append(productImages, models.ProductImage{
+			ID:         uuid.New().String(),
+			ProductID:  newProductID,
+			Path:       imagePath,
+			ExtraLarge: imagePath,
+			Large:      imagePath,
+			Medium:     imagePath,
+			Small:      imagePath,
+		})
+	}
+	product.ProductImages = productImages
 
 	err = h.productRepo.CreateProduct(r.Context(), product)
 	if err != nil {
 		log.Printf("AddProductPost: Gagal membuat produk di repository: %v", err)
-		http.Redirect(w, r, fmt.Sprintf("/admin/products/add?status=error&message=%s", url.QueryEscape("Gagal menambahkan produk: "+err.Error())), http.StatusSeeOther)
+		h.handleFormError(w, r, "/admin/products/add", "Gagal menambahkan produk: "+err.Error(), &form, nil)
 		return
 	}
 
@@ -273,18 +290,17 @@ func (h *AdminHandler) EditProductPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	formData := ProductForm{
-		ID:          product.ID,
-		Name:        product.Name,
-		Description: product.Description,
-		SKU:         product.Sku,
-		Price:       product.Price.String(),
-		Stock:       fmt.Sprintf("%d", product.Stock),
-		Weight:      product.Weight.String(),
+		ID:              product.ID,
+		Name:            product.Name,
+		Description:     product.Description,
+		SKU:             product.Sku,
+		Price:           product.Price.String(),
+		Stock:           fmt.Sprintf("%d", product.Stock),
+		Weight:          product.Weight.String(),
+		DiscountPercent: product.DiscountPercent.String(),
+		ExistingImages:  product.ProductImages,
 	}
 
-	if len(product.ProductImages) > 0 {
-		formData.ImagePath = product.ProductImages[0].Path
-	}
 	if len(product.Categories) > 0 {
 		formData.CategoryID = product.Categories[0].ID
 	}
@@ -336,13 +352,15 @@ func (h *AdminHandler) EditProductPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var form ProductForm
-	if err := r.ParseForm(); err != nil {
-		log.Printf("EditProductPost: Kesalahan parsing form: %v", err)
-		http.Redirect(w, r, fmt.Sprintf("/admin/products/edit/%s?status=error&message=%s", productID, url.QueryEscape("Kesalahan parsing form.")), http.StatusSeeOther)
+	err = r.ParseMultipartForm(10 << 20)
+	if err != nil {
+		log.Printf("EditProductPost: Kesalahan parsing multipart form: %v", err)
+
+		h.handleFormError(w, r, fmt.Sprintf("/admin/products/edit/%s", productID), "Kesalahan parsing form (ukuran file terlalu besar?).", &ProductForm{ID: productID, ExistingImages: product.ProductImages}, nil)
 		return
 	}
 
+	var form ProductForm
 	form.ID = productID
 	form.Name = r.PostFormValue("name")
 	form.Description = r.PostFormValue("description")
@@ -350,86 +368,55 @@ func (h *AdminHandler) EditProductPost(w http.ResponseWriter, r *http.Request) {
 	form.Price = r.PostFormValue("price")
 	form.Stock = r.PostFormValue("stock")
 	form.Weight = r.PostFormValue("weight")
-	form.ImagePath = r.PostFormValue("image_path")
 	form.CategoryID = r.PostFormValue("category_id")
 	form.DiscountPercent = r.PostFormValue("discount_percent")
 
-	log.Printf("EditProductPost: Form diterima untuk produk %s - Nama: %s, SKU: %s, Harga: %s, Stok: %s, Weight: %s, ImagePath: %s, CategoryID: %s, DiscountPercent: %s",
-		productID, form.Name, form.SKU, form.Price, form.Stock, form.Weight, form.ImagePath, form.CategoryID, form.DiscountPercent)
+	log.Printf("EditProductPost: Form diterima untuk produk %s - Nama: %s, SKU: %s, Harga: %s, Stok: %s, Weight: %s, CategoryID: %s, DiscountPercent: %s",
+		productID, form.Name, form.SKU, form.Price, form.Stock, form.Weight, form.CategoryID, form.DiscountPercent)
 
 	if err := h.validator.Struct(&form); err != nil {
 		log.Printf("EditProductPost: Validasi form GAGAL: %v", err)
 		validationErrors := err.(validator.ValidationErrors)
 		formattedErrors := helpers.FormatValidationErrors(validationErrors)
 
-		data := &AdminProductPageData{
-			FormAction:  fmt.Sprintf("/admin/products/edit/%s", productID),
-			IsEdit:      true,
-			ProductData: &form,
-			Errors:      formattedErrors,
-		}
-		h.populateBaseDataForAdmin(r, data)
-
-		categories, catErr := h.categoryRepo.GetAll(r.Context())
-		if catErr != nil {
-			log.Printf("EditProductPost: Gagal mengambil kategori saat validasi gagal: %v", catErr)
-		}
-		data.Categories = categories
-
-		data.Title = "Edit Produk"
-		data.IsAuthPage = true
-		data.IsAdminPage = true
-		data.HideAdminWelcomeMessage = true
-		data.Breadcrumbs = []breadcrumb.Breadcrumb{
-			{Name: "Beranda", URL: "/"},
-			{Name: "Admin", URL: "/admin/dashboard"},
-			{Name: "Produk", URL: "/admin/products"},
-			{Name: "Edit", URL: fmt.Sprintf("/admin/products/edit/%s", productID)},
-		}
-		h.render.HTML(w, http.StatusOK, "admin/products/form", data)
+		h.handleFormError(w, r, fmt.Sprintf("/admin/products/edit/%s", productID), "Validasi form gagal.", &ProductForm{ID: productID, ExistingImages: product.ProductImages}, formattedErrors)
 		return
 	}
 
-	priceFloat, err := strconv.ParseFloat(form.Price, 64)
-	if err != nil {
-		log.Printf("EditProductPost: Format harga tidak valid: %v", err)
-		http.Redirect(w, r, fmt.Sprintf("/admin/products/edit/%s?status=error&message=%s", productID, url.QueryEscape("Format harga tidak valid.")), http.StatusSeeOther)
-		return
-	}
+	priceFloat, _ := strconv.ParseFloat(form.Price, 64)
 	price := decimal.NewFromFloat(priceFloat)
-
-	stock, err := strconv.Atoi(form.Stock)
-	if err != nil {
-		log.Printf("EditProductPost: Format stok tidak valid: %v", err)
-		http.Redirect(w, r, fmt.Sprintf("/admin/products/edit/%s?status=error&message=%s", productID, url.QueryEscape("Format stok tidak valid.")), http.StatusSeeOther)
-		return
-	}
-	weightFloat, err := strconv.ParseFloat(form.Weight, 64)
-	if err != nil {
-		log.Printf("EditProductPost: Format berat tidak valid: %v", err)
-		http.Redirect(w, r, fmt.Sprintf("/admin/products/edit/%s?status=error&message=%s", productID, url.QueryEscape("Format berat tidak valid.")), http.StatusSeeOther)
-		return
-	}
+	stock, _ := strconv.Atoi(form.Stock)
+	weightFloat, _ := strconv.ParseFloat(form.Weight, 64)
 	weight := decimal.NewFromFloat(weightFloat)
-
-	discountPercentFloat, err := strconv.ParseFloat(form.DiscountPercent, 64)
-	if err != nil {
-		log.Printf("EditProductPost: Format diskon tidak valid, setting ke 0: %v", err)
-		discountPercentFloat = 0
-	}
+	discountPercentFloat, _ := strconv.ParseFloat(form.DiscountPercent, 64)
 	discountPercent := decimal.NewFromFloat(discountPercentFloat)
+
+	if form.SKU != product.Sku {
+		IsSkuExist, err := h.productRepo.IsSKUExists(r.Context(), form.SKU)
+		if err != nil {
+			log.Printf("EditProductPost: Gagal mengecek SKU unik: %v", err)
+
+			h.handleFormError(w, r, fmt.Sprintf("/admin/products/edit/%s", productID), "Gagal mengecek SKU.", &ProductForm{ID: productID, ExistingImages: product.ProductImages}, nil)
+			return
+		}
+		if IsSkuExist {
+
+			h.handleFormError(w, r, fmt.Sprintf("/admin/products/edit/%s", productID), "SKU sudah digunakan oleh produk lain.", &ProductForm{ID: productID, ExistingImages: product.ProductImages}, map[string]string{"sku": "SKU ini sudah ada."})
+			return
+		}
+	}
 
 	category, err := h.categoryRepo.GetByID(r.Context(), form.CategoryID)
 	if err != nil || category == nil {
-		log.Printf("EditProductPost: Kategori tidak ditemukan: %v", err)
-		http.Redirect(w, r, fmt.Sprintf("/admin/products/edit/%s?status=error&message=%s", productID, url.QueryEscape("Kategori tidak valid.")), http.StatusSeeOther)
+
+		h.handleFormError(w, r, fmt.Sprintf("/admin/products/edit/%s", productID), "Kategori tidak valid.", &ProductForm{ID: productID, ExistingImages: product.ProductImages}, nil)
 		return
 	}
 
 	userID, ok := r.Context().Value(helpers.ContextKeyUserID).(string)
 	if !ok || userID == "" {
-		log.Printf("EditProductPost: UserID tidak ditemukan di konteks")
-		http.Redirect(w, r, fmt.Sprintf("/admin/products/edit/%s?status=error&message=%s", productID, url.QueryEscape("User admin tidak terautentikasi.")), http.StatusSeeOther)
+
+		h.handleFormError(w, r, fmt.Sprintf("/admin/products/edit/%s", productID), "User admin tidak terautentikasi.", &ProductForm{ID: productID, ExistingImages: product.ProductImages}, nil)
 		return
 	}
 
@@ -444,37 +431,128 @@ func (h *AdminHandler) EditProductPost(w http.ResponseWriter, r *http.Request) {
 	product.Stock = stock
 	product.Weight = weight
 	product.DiscountPercent = discountPercent
+	product.DiscountAmount = calc.CalculateDiscount(price, discountPercent)
 	product.UpdatedAt = time.Now()
 	product.UserID = userID
 
 	product.Categories = []models.Category{*category}
 
-	if form.ImagePath != "" {
-		if len(product.ProductImages) == 0 {
-			product.ProductImages = []models.ProductImage{{}}
-		}
-		product.ProductImages[0].Path = form.ImagePath
-		product.ProductImages[0].ExtraLarge = form.ImagePath
-		product.ProductImages[0].Large = form.ImagePath
-		product.ProductImages[0].Medium = form.ImagePath
-		product.ProductImages[0].Small = form.ImagePath
-	} else {
+	var finalProductImages []models.ProductImage = make([]models.ProductImage, 0)
 
-		product.ProductImages = []models.ProductImage{}
+	retainedImageIDsStr := r.PostFormValue("retained_image_ids")
+	retainedImageIDsMap := make(map[string]bool)
+	if retainedImageIDsStr != "" {
+		for _, id := range strings.Split(retainedImageIDsStr, ",") {
+			id = strings.TrimSpace(id)
+			if id != "" {
+				retainedImageIDsMap[id] = true
+			}
+		}
 	}
 
-	if len(product.ProductImages) > 0 {
-		log.Printf("EditProductPost: ProductImages content: %+v", product.ProductImages[0])
+	if product.ProductImages == nil {
+		product.ProductImages = []models.ProductImage{}
+
+	}
+
+	for _, img := range product.ProductImages {
+
+		if retainedImageIDsMap[img.ID] {
+			finalProductImages = append(finalProductImages, img)
+		} else {
+
+			if img.Path != "" {
+				fullPath := filepath.Join(".", img.Path)
+				if _, err := os.Stat(fullPath); os.IsNotExist(err) {
+					log.Printf("EditProductPost: Gagal menghapus file fisik gambar lama yang tidak dipertahankan %s: remove %s: The system cannot find the file specified. (File already gone)", fullPath, fullPath)
+				} else if err := os.Remove(fullPath); err != nil {
+					log.Printf("EditProductPost: Gagal menghapus file fisik gambar lama yang tidak dipertahankan %s: %v", fullPath, err)
+				} else {
+					log.Printf("EditProductPost: Berhasil menghapus file fisik gambar lama yang tidak dipertahankan: %s", fullPath)
+				}
+			} else {
+				log.Printf("EditProductPost: Melewatkan penghapusan gambar lama karena path kosong untuk ID: %s", img.ID)
+			}
+		}
+	}
+
+	files := r.MultipartForm.File["product_images"]
+
+	var uploadedProductImages []models.ProductImage = make([]models.ProductImage, 0)
+	for _, fileHeader := range files {
+		if fileHeader.Size == 0 {
+			continue
+		}
+		imagePath, err := h.saveProductImage(fileHeader)
+		if err != nil {
+			log.Printf("EditProductPost: Gagal menyimpan gambar baru: %v", err)
+
+			form.ExistingImages = finalProductImages
+			h.handleFormError(w, r, fmt.Sprintf("/admin/products/edit/%s", productID), "Gagal menyimpan salah satu gambar baru.", &form, nil)
+			return
+		}
+		uploadedProductImages = append(uploadedProductImages, models.ProductImage{
+			ID:         uuid.New().String(),
+			ProductID:  productID,
+			Path:       imagePath,
+			ExtraLarge: imagePath,
+			Large:      imagePath,
+			Medium:     imagePath,
+			Small:      imagePath,
+			CreatedAt:  time.Now(),
+			UpdatedAt:  time.Now(),
+		})
+	}
+
+	product.ProductImages = append(finalProductImages, uploadedProductImages...)
+
+	if len(product.ProductImages) > MaxImages {
+
+		for _, img := range uploadedProductImages {
+			fullPath := filepath.Join(".", img.Path)
+			if err := os.Remove(fullPath); err != nil {
+				log.Printf("EditProductPost: Gagal menghapus file fisik baru karena melebihi batas %s: %v", fullPath, err)
+			} else {
+				log.Printf("EditProductPost: Berhasil menghapus file fisik baru karena melebihi batas: %s", fullPath)
+			}
+		}
+
+		product.ProductImages = finalProductImages
+		form.ExistingImages = finalProductImages
+		h.handleFormError(w, r, fmt.Sprintf("/admin/products/edit/%s", productID), fmt.Sprintf("Anda hanya dapat memiliki total %d gambar. Total gambar akan menjadi %d (termasuk %d yang baru diunggah).", MaxImages, len(product.ProductImages)+len(files), len(files)), &form, map[string]string{"product_images": fmt.Sprintf("Maksimal %d gambar.", MaxImages)})
+		return
 	}
 
 	err = h.productRepo.UpdateProduct(r.Context(), product)
 	if err != nil {
 		log.Printf("EditProductPost: GAGAL memperbarui produk %s: %v", productID, err)
-		http.Redirect(w, r, fmt.Sprintf("/admin/products/edit/%s?status=error&message=%s", productID, url.QueryEscape("Gagal memperbarui produk: "+err.Error())), http.StatusSeeOther)
+
+		form.ExistingImages = product.ProductImages
+		h.handleFormError(w, r, fmt.Sprintf("/admin/products/edit/%s", productID), "Gagal memperbarui produk: "+err.Error(), &form, nil)
 		return
 	}
 
 	http.Redirect(w, r, "/admin/products?status=success&message="+url.QueryEscape("Produk berhasil diperbarui!"), http.StatusSeeOther)
+}
+
+func (h *AdminHandler) DeleteProductImage(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	productID := vars["product_id"]
+	imageID := vars["image_id"]
+
+	if r.Method != http.MethodDelete {
+		http.Error(w, "Metode tidak diizinkan", http.StatusMethodNotAllowed)
+		return
+	}
+
+	err := h.productRepo.DeleteProductImage(r.Context(), imageID)
+	if err != nil {
+		log.Printf("DeleteProductImage: Gagal menghapus gambar: %v", err)
+		http.Error(w, "Gagal menghapus gambar.", http.StatusInternalServerError)
+		return
+	}
+
+	http.Redirect(w, r, fmt.Sprintf("/admin/products/edit/%s?status=success&message=%s", productID, url.QueryEscape("Gambar berhasil dihapus.")), http.StatusSeeOther)
 }
 
 func (h *AdminHandler) DeleteProductPost(w http.ResponseWriter, r *http.Request) {
@@ -482,18 +560,113 @@ func (h *AdminHandler) DeleteProductPost(w http.ResponseWriter, r *http.Request)
 	productID := vars["id"]
 
 	product, err := h.productRepo.GetByID(r.Context(), productID)
-	if err != nil || product == nil {
+	if err != nil {
 		log.Printf("DeleteProductPost: Produk %s tidak ditemukan untuk penghapusan: %v", productID, err)
 		http.Redirect(w, r, fmt.Sprintf("/admin/products?status=error&message=%s", url.QueryEscape("Produk tidak ditemukan atau sudah dihapus.")), http.StatusSeeOther)
 		return
 	}
+	if product == nil {
+		log.Printf("DeleteProductPost: Produk %s tidak ditemukan untuk penghapusan (nil product)", productID)
+		http.Redirect(w, r, fmt.Sprintf("/admin/products?status=error&message=%s", url.QueryEscape("Produk tidak ditemukan atau sudah dihapus.")), http.StatusSeeOther)
+		return
+	}
+
+	for _, img := range product.ProductImages {
+		fullPath := filepath.Join(".", img.Path)
+		if err := os.Remove(fullPath); err != nil {
+			log.Printf("DeleteProductPost: Gagal menghapus file gambar fisik %s untuk produk %s: %v", fullPath, productID, err)
+		} else {
+			log.Printf("DeleteProductPost: Berhasil menghapus file gambar fisik: %s", fullPath)
+		}
+	}
 
 	err = h.productRepo.DeleteProduct(r.Context(), productID)
 	if err != nil {
-		log.Printf("DeleteProductPost: Gagal menghapus produk %s: %v", productID, err)
-		http.Redirect(w, r, fmt.Sprintf("/admin/products?status=error&message=%s", url.QueryEscape("Gagal menghapus produk.")), http.StatusSeeOther)
+		log.Printf("DeleteProductPost: Gagal menghapus produk %s dari database: %v", productID, err)
+		http.Redirect(w, r, fmt.Sprintf("/admin/products?status=error&message=%s", url.QueryEscape("Gagal menghapus produk dari database.")), http.StatusSeeOther)
 		return
 	}
 
 	http.Redirect(w, r, fmt.Sprintf("/admin/products?status=success&message=%s", url.QueryEscape("Produk berhasil dihapus!")), http.StatusSeeOther)
+}
+
+func (h *AdminHandler) handleFormError(w http.ResponseWriter, r *http.Request, redirectURL string, msg string, formData *ProductForm, validationErrors map[string]string) {
+	log.Printf("%s: %s", redirectURL, msg)
+
+	data := &AdminProductPageData{
+		FormAction:  redirectURL,
+		IsEdit:      (redirectURL != "/admin/products/add"),
+		ProductData: formData,
+		Errors:      validationErrors,
+	}
+	h.populateBaseDataForAdmin(r, data)
+
+	categories, catErr := h.categoryRepo.GetAll(r.Context())
+	if catErr != nil {
+		log.Printf("handleFormError: Gagal mengambil kategori: %v", catErr)
+	}
+	data.Categories = categories
+	data.Message = msg
+	data.MessageStatus = "error"
+	data.Title = "Tambah Produk Baru"
+	if data.IsEdit {
+		data.Title = "Edit Produk"
+	}
+	data.IsAuthPage = true
+	data.IsAdminPage = true
+	data.HideAdminWelcomeMessage = true
+
+	if data.IsEdit && formData.ID != "" {
+		data.Breadcrumbs = []breadcrumb.Breadcrumb{
+			{Name: "Beranda", URL: "/"}, {Name: "Admin", URL: "/admin/dashboard"},
+			{Name: "Produk", URL: "/admin/products"}, {Name: "Edit", URL: redirectURL},
+		}
+
+		if len(formData.ExistingImages) == 0 {
+			product, err := h.productRepo.GetByID(r.Context(), formData.ID)
+			if err == nil && product != nil {
+				formData.ExistingImages = product.ProductImages
+			}
+		}
+	} else {
+		data.Breadcrumbs = []breadcrumb.Breadcrumb{
+			{Name: "Beranda", URL: "/"}, {Name: "Admin", URL: "/admin/dashboard"},
+			{Name: "Produk", URL: "/admin/products"}, {Name: "Tambah Baru", URL: redirectURL},
+		}
+	}
+	h.render.HTML(w, http.StatusOK, "admin/products/form", data)
+}
+
+func (h *AdminHandler) saveProductImage(fileHeader *multipart.FileHeader) (string, error) {
+
+	if err := os.MkdirAll(UploadDir, 0755); err != nil {
+		log.Printf("saveProductImage: Gagal membuat direktori upload: %v", err)
+		return "", fmt.Errorf("gagal membuat direktori upload: %w", err)
+	}
+
+	file, err := fileHeader.Open()
+	if err != nil {
+		log.Printf("saveProductImage: Gagal membuka file yang diunggah: %v", err)
+		return "", fmt.Errorf("gagal membuka file yang diunggah: %w", err)
+	}
+	defer file.Close()
+
+	extension := filepath.Ext(fileHeader.Filename)
+	uniqueFileName := uuid.New().String() + extension
+	filePath := filepath.Join(UploadDir, uniqueFileName)
+
+	outFile, err := os.Create(filePath)
+	if err != nil {
+		log.Printf("saveProductImage: Gagal menyalin file yang diunggah: %v", err)
+		log.Printf("saveProductImage: Menyimpan file ke: %s", filePath)
+		return "", fmt.Errorf("gagal membuat file di server: %w", err)
+	}
+	defer outFile.Close()
+
+	_, err = io.Copy(outFile, file)
+	if err != nil {
+		return "", fmt.Errorf("gagal menyalin file yang diunggah: %w", err)
+	}
+
+	return "/static/uploads/products/" + uniqueFileName, nil
 }

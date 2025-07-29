@@ -4,8 +4,10 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
+	"os"
 	"time"
 
+	"github.com/Rakhulsr/go-ecommerce/app/cmd"
 	"github.com/Rakhulsr/go-ecommerce/app/configs"
 	"github.com/Rakhulsr/go-ecommerce/app/routes"
 	"github.com/midtrans/midtrans-go"
@@ -28,6 +30,14 @@ func init() {
 }
 
 func main() {
+
+	if len(os.Args) > 1 {
+
+		log.Println("Detected CLI command. Running CLI...")
+		cmd.RunCli()
+
+		return
+	}
 
 	rand.Seed(time.Now().UnixNano())
 

@@ -20,6 +20,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&models.Shipment{},
 		&models.Cart{},
 		&models.CartItem{},
+		&models.ProductCategory{},
 	)
 	if err != nil {
 		log.Printf("Error during initial AutoMigrate: %v", err)

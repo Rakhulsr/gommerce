@@ -71,9 +71,12 @@ func NewRouter(db *gorm.DB) *mux.Router {
 	komerceCheckoutHandler := handlers.NewKomerceCheckoutHandler(render, validate, checkoutSvc, cartRepo, userRepo, orderRepo, productRepo, db, komerceShippingSvc, addressRepo, sessionStore, *paymentSvc, cartItemRepo)
 	orderHandler := handlers.NewOrderHandler(render, orderRepo, userRepo, paymentRepo)
 
-	router.PathPrefix("/css/").Handler(http.StripPrefix("/css/", http.FileServer(http.Dir("assets/css"))))
-	router.PathPrefix("/js/").Handler(http.StripPrefix("/js/", http.FileServer(http.Dir("assets/js"))))
-	router.PathPrefix("/images/").Handler(http.StripPrefix("/images/", http.FileServer(http.Dir("assets/images"))))
+	router.PathPrefix("/css/").Handler(http.StripPrefix("/css/", http.FileServer(http.Dir("static/assets/css"))))
+	router.PathPrefix("/js/").Handler(http.StripPrefix("/js/", http.FileServer(http.Dir("static/assets/js"))))
+	router.PathPrefix("/images/").Handler(http.StripPrefix("/images/", http.FileServer(http.Dir("static/assets/images"))))
+
+	staticFileDir := "static"
+	router.PathPrefix("/static/").Handler(http.StripPrefix("/static/", http.FileServer(http.Dir(staticFileDir))))
 
 	router.Use(mux.MiddlewareFunc(middlewares.MethodOverrideMiddleware))
 	router.Use(mux.MiddlewareFunc((middlewares.ContentSecurityPolicyMiddleware)))
@@ -163,6 +166,7 @@ func NewRouter(db *gorm.DB) *mux.Router {
 	adminRouter.HandleFunc("/users/edit/{id}", adminHandler.EditUserPage).Methods("GET")
 	adminRouter.HandleFunc("/users/edit/{id}", adminHandler.EditUserPost).Methods("POST", "PUT")
 	adminRouter.HandleFunc("/users/delete/{id}", adminHandler.DeleteUserPost).Methods("POST", "DELETE")
+	adminRouter.HandleFunc("/products/{product_id}/images/{image_id}", adminHandler.DeleteProductImage).Methods("DELETE")
 
 	adminRouter.HandleFunc("/orders", adminHandler.GetOrdersPage).Methods("GET")
 	adminRouter.HandleFunc("/orders/update-status", adminHandler.UpdateOrderStatusPost).Methods("POST", "PUT")

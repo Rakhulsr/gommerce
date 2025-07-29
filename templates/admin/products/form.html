@@ -1,7 +1,5 @@
-
 {{ define "admin/products/form" }}
 <div class="flex min-h-screen bg-gray-100">
-
     <div class="flex-1 px-6 py-8">
         <h1 class="text-3xl font-bold text-gray-800 mb-6">{{ if .IsEdit }}Edit Produk{{ else }}Tambah Produk Baru{{ end }}</h1>
 
@@ -20,7 +18,7 @@
         {{ end }}
 
         <div class="bg-white rounded-lg shadow-sm p-6">
-            <form action="{{ .FormAction }}" method="POST">
+            <form action="{{ .FormAction }}" method="POST" enctype="multipart/form-data" id="productForm">
                 {{ if .IsEdit }}
                     <input type="hidden" name="_method" value="PUT">
                     <input type="hidden" name="id" value="{{ .ProductData.ID }}">
@@ -39,8 +37,8 @@
                 <div class="mb-4">
                     <label for="description" class="block text-gray-700 text-sm font-bold mb-2">Deskripsi:</label>
                     <textarea id="description" name="description"
-                              class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline h-32 {{ if .Errors.description }}border-red-500{{ end }}"
-                              placeholder="Masukkan Deskripsi Produk">{{ .ProductData.Description }}</textarea>
+                               class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline h-32 {{ if .Errors.description }}border-red-500{{ end }}"
+                               placeholder="Masukkan Deskripsi Produk">{{ .ProductData.Description }}</textarea>
                     {{ if .Errors.description }}
                         <p class="text-red-500 text-xs italic">{{ .Errors.description }}</p>
                     {{ end }}
@@ -86,7 +84,6 @@
                     {{ end }}
                 </div>
 
-                <!-- DISKON PER PRODUK -->
                 <div class="mb-4">
                     <label for="discount_percent" class="block text-gray-700 text-sm font-bold mb-2">Diskon (Persen):</label>
                     <input type="number" step="0.01" id="discount_percent" name="discount_percent" value="{{ .ProductData.DiscountPercent }}"
@@ -96,12 +93,10 @@
                         <p class="text-red-500 text-xs italic">{{ .Errors.discount_percent }}</p>
                     {{ end }}
                 </div>
-                <!-- AKHIR DISKON PER PRODUK -->
-
                 <div class="mb-4">
                     <label for="category_id" class="block text-gray-700 text-sm font-bold mb-2">Kategori:</label>
                     <select id="category_id" name="category_id"
-                            class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline {{ if .Errors.category_id }}border-red-500{{ end }}">
+                             class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline {{ if .Errors.category_id }}border-red-500{{ end }}">
                         <option value="">Pilih Kategori</option>
                         {{ range .Categories }}
                             <option value="{{ .ID }}" {{ if eq .ID $.ProductData.CategoryID }}selected{{ end }}>{{ .Name }}</option>
@@ -113,18 +108,47 @@
                 </div>
 
                 <div class="mb-4">
-                    <label for="image_path" class="block text-gray-700 text-sm font-bold mb-2">URL Gambar (Opsional):</label>
-                    <input type="text" id="image_path" name="image_path" value="{{ .ProductData.ImagePath }}"
-                           class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline {{ if .Errors.image_path }}border-red-500{{ end }}"
-                           placeholder="Masukkan URL Gambar (misal: /static/images/product.jpg)">
-                    {{ if .Errors.image_path }}
-                        <p class="text-red-500 text-xs italic">{{ .Errors.image_path }}</p>
+                    <label class="block text-gray-700 text-sm font-bold mb-2">Gambar Produk (Maks 3):</label>
+                    
+                    <div id="drop-area"
+                         class="border-2 border-dashed border-gray-400 rounded-lg p-6 text-center cursor-pointer hover:border-blue-500 transition-colors duration-200">
+                        <input type="file" id="product_images" name="product_images" multiple accept="image/*" class="hidden">
+                        <p class="text-gray-600">Seret & Jatuhkan gambar di sini, atau <span class="text-blue-500 font-semibold">klik untuk memilih file</span>.</p>
+                        <p class="text-gray-600 text-xs mt-1">Pilih hingga 3 file gambar (JPG, PNG, GIF).</p>
+                    </div>
+
+                    <div id="file-preview" class="mt-4 flex flex-wrap gap-2">
+                        </div>
+
+                    {{ if .Errors.product_images }}
+                        <p class="text-red-500 text-xs italic">{{ .Errors.product_images }}</p>
+                    {{ end }}
+
+                    {{ if .IsEdit }}
+                        <div class="mt-4">
+                            <h4 class="text-sm font-bold text-gray-700 mb-2">Gambar Saat Ini:</h4>
+                            <div id="existing-images-container" class="flex flex-wrap gap-2">
+                                {{ range .ProductData.ExistingImages }} 
+                                    <div id="img-{{ .ID }}" class="relative group">
+                                        <img src="{{ .Small }}" alt="Product Image" class="w-24 h-24 object-cover rounded shadow-sm">
+                                        <button type="button" 
+                                                onclick="removeExistingImage('{{ .ID }}')"
+                                                class="absolute top-0 right-0 bg-red-600 text-white rounded-full p-1 text-xs opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                                            <i class="fas fa-times"></i>
+                                        </button>
+                                    </div>
+                                {{ else }}
+                                    <p class="text-gray-500 text-sm">Belum ada gambar.</p>
+                                {{ end }}
+                            </div>
+                        </div>
+                        <input type="hidden" id="retained_image_ids" name="retained_image_ids" value="">
                     {{ end }}
                 </div>
 
                 <div class="flex items-center justify-between">
                     <button type="submit"
-                            class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md shadow-md transition duration-300 ease-in-out">
+                               class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md shadow-md transition duration-300 ease-in-out">
                         {{ if .IsEdit }}Perbarui Produk{{ else }}Tambah Produk{{ end }}
                     </button>
                     <a href="/admin/products" class="inline-block align-baseline font-bold text-sm text-blue-500 hover:text-blue-800">
@@ -147,6 +171,136 @@
                 });
             }, 5000);
         }
+
+        const dropArea = document.getElementById('drop-area');
+        const fileInput = document.getElementById('product_images');
+        const filePreview = document.getElementById('file-preview');
+        let selectedFiles = new DataTransfer(); 
+
+        const retainedImageIdsInput = document.getElementById('retained_image_ids');
+        let retainedImageIds = []; 
+
+       
+        const existingImagesContainer = document.getElementById('existing-images-container');
+        if (existingImagesContainer) {
+            existingImagesContainer.querySelectorAll('div[id^="img-"]').forEach(imgDiv => {
+                const imgId = imgDiv.id.replace('img-', '');
+                retainedImageIds.push(imgId);
+            });
+          
+            retainedImageIdsInput.value = retainedImageIds.join(',');
+            console.log("Initial retainedImageIds:", retainedImageIdsInput.value); 
+        }
+
+        dropArea.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropArea.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropArea.addEventListener(eventName, () => dropArea.classList.add('border-blue-500', 'bg-blue-50'), false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropArea.addEventListener(eventName, () => dropArea.classList.remove('border-blue-500', 'bg-blue-50'), false);
+        });
+
+        dropArea.addEventListener('drop', handleDrop, false);
+
+        function handleDrop(e) {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            handleFiles(files);
+        }
+
+        fileInput.addEventListener('change', (e) => {
+            handleFiles(e.target.files);
+        });
+
+        function handleFiles(files) {
+            const maxImages = 3;
+          
+            const currentTotalImages = retainedImageIds.length + selectedFiles.files.length;
+
+            console.log("Current total images (existing + new pending):", currentTotalImages); 
+            console.log("Files to add:", files.length); 
+
+            if (currentTotalImages + files.length > maxImages) {
+                alert(`Anda hanya dapat memiliki total ${maxImages} gambar (termasuk yang sudah ada). Anda mencoba menambahkan ${files.length} file baru, sehingga total akan menjadi ${currentTotalImages + files.length}.`);
+                return;
+            }
+
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                if (file.type.startsWith('image/')) {
+                    selectedFiles.items.add(file);
+                    previewFile(file);
+                } else {
+                    alert('Hanya file gambar (JPG, PNG, GIF) yang diizinkan.');
+                }
+            }
+            fileInput.files = selectedFiles.files; 
+            console.log("fileInput.files (after adding):", fileInput.files.length);
+        }
+
+        function previewFile(file) {
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onloadend = function() {
+                const imgContainer = document.createElement('div');
+                imgContainer.classList.add('relative', 'group');
+
+                const img = document.createElement('img');
+                img.src = reader.result;
+                img.classList.add('w-24', 'h-24', 'object-cover', 'rounded', 'shadow-sm');
+                img.alt = file.name;
+
+                const removeBtn = document.createElement('button');
+                removeBtn.type = 'button';
+                removeBtn.innerHTML = '<i class="fas fa-times"></i>';
+                removeBtn.classList.add('absolute', 'top-0', 'right-0', 'bg-red-600', 'text-white', 'rounded-full', 'p-1', 'text-xs', 'opacity-0', 'group-hover:opacity-100', 'transition-opacity', 'duration-300');
+                
+                removeBtn.onclick = function() {
+                    imgContainer.remove();
+                    let newSelectedFiles = new DataTransfer();
+                    for (let i = 0; i < selectedFiles.files.length; i++) {
+                        if (selectedFiles.files[i] !== file) {
+                            newSelectedFiles.items.add(selectedFiles.files[i]);
+                        }
+                    }
+                    selectedFiles = newSelectedFiles;
+                    fileInput.files = selectedFiles.files;
+                    console.log("fileInput.files (after removing new):", fileInput.files.length); 
+                };
+
+                imgContainer.appendChild(img);
+                imgContainer.appendChild(removeBtn);
+                filePreview.appendChild(imgContainer);
+            }
+        }
+
+        function removeExistingImage(imageID) {
+            if (confirm('Apakah Anda yakin ingin menghapus gambar ini? Ini akan dihapus secara permanen setelah Anda menyimpan perubahan.')) {
+                const imgDiv = document.getElementById('img-' + imageID);
+                if (imgDiv) {
+                    imgDiv.remove();
+                   
+                    retainedImageIds = retainedImageIds.filter(id => id !== imageID);
+                    retainedImageIdsInput.value = retainedImageIds.join(',');
+                    console.log("Updated retainedImageIds:", retainedImageIdsInput.value); 
+                    alert('Gambar akan dihapus setelah Anda menyimpan perubahan.');
+                }
+            }
+        }
+        window.removeExistingImage = removeExistingImage;
     });
 </script>
 {{ end }}

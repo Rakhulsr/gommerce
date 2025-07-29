@@ -110,14 +110,14 @@ func AuthAndCartSessionMiddleware(userRepo repositories.UserRepositoryImpl, cart
 							log.Printf("AuthAndCartSessionMiddleware: Failed to set cart ID %s in session: %v", activeCartID, err)
 						}
 					}
-					log.Printf("AuthAndCartSessionMiddleware: CartID '%s' set in context for user '%s'.", activeCartID, activeUserID)
+
 				} else {
 
 					activeCartID = ""
 					if cartIDFromSession != "" {
 						sessionStore.ClearCartID(w, r)
 					}
-					log.Printf("AuthAndCartSessionMiddleware: Cart is nil after GetOrCreateCartByUserID for user '%s'.", activeUserID)
+
 				}
 			} else {
 

@@ -92,10 +92,12 @@ type ProductForm struct {
 	Price           string `form:"price" validate:"required,numeric,min=0"`
 	Stock           string `form:"stock" validate:"required,numeric,min=0"`
 	Weight          string `form:"weight" validate:"required,numeric,min=0"`
-	ImagePath       string `form:"image_path" validate:"omitempty,url"`
 	CategoryID      string `form:"category_id" validate:"required"`
 	DiscountPercent string `form:"discount_percent" validate:"omitempty,numeric,min=0,max=100"`
+	// ImagePath       string `form:"image_path" validate:"omitempty,url"`
+	ExistingImages []models.ProductImage
 }
+
 type AdminCategoryPageData struct {
 	other.BasePageData
 	Categories   []models.Category

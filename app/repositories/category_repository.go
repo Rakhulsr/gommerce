@@ -2,6 +2,7 @@ package repositories
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 
@@ -31,14 +32,27 @@ func (r *categoryRepository) Create(ctx context.Context, category *models.Catego
 	return r.db.WithContext(ctx).Create(category).Error
 }
 
+// func (r *categoryRepository) GetByID(ctx context.Context, id string) (*models.Category, error) {
+// 	var category models.Category
+// 	err := r.db.WithContext(ctx).Preload("Section").First(&category, "id = ?", id).Error
+// 	if err != nil {
+// 		if err == gorm.ErrRecordNotFound {
+// 			return nil, nil
+// 		}
+// 		return nil, err
+// 	}
+// 	return &category, nil
+// }
+
 func (r *categoryRepository) GetByID(ctx context.Context, id string) (*models.Category, error) {
 	var category models.Category
-	err := r.db.WithContext(ctx).Preload("Section").First(&category, "id = ?", id).Error
+	// PENTING: Gunakan Omit("Section") agar tidak mencoba memuat relasi Section
+	err := r.db.WithContext(ctx).Omit("Section").Where("id = ?", id).First(&category).Error
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
-		return nil, err
+		return nil, fmt.Errorf("gagal mengambil kategori berdasarkan ID: %w", err)
 	}
 	return &category, nil
 }
@@ -55,11 +69,20 @@ func (r *categoryRepository) GetBySlug(ctx context.Context, slug string) (*model
 	return &category, nil
 }
 
+// func (r *categoryRepository) GetAll(ctx context.Context) ([]models.Category, error) {
+// 	var categories []models.Category
+// 	err := r.db.WithContext(ctx).Preload("Section").Find(&categories).Error
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	return categories, nil
+// }
+
 func (r *categoryRepository) GetAll(ctx context.Context) ([]models.Category, error) {
 	var categories []models.Category
-	err := r.db.WithContext(ctx).Preload("Section").Find(&categories).Error
+	err := r.db.WithContext(ctx).Omit("Section").Find(&categories).Error // <--- Tambahkan Omit("Section") di sini juga
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("gagal mengambil semua kategori: %w", err)
 	}
 	return categories, nil
 }
