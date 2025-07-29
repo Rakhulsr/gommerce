@@ -29,6 +29,8 @@ type OrderRepository interface {
 
 	GetOrderCount(ctx context.Context) (int64, error)
 	GetRecentOrders(ctx context.Context, limit int) ([]models.Order, error)
+
+	GetTopNOrders(ctx context.Context, limit int) ([]models.Order, error)
 }
 
 type gormOrderRepository struct {
@@ -192,5 +194,16 @@ func (r *gormOrderRepository) GetRecentOrders(ctx context.Context, limit int) ([
 		return nil, fmt.Errorf("failed to retrieve recent orders: %w", err)
 	}
 
+	return orders, nil
+}
+
+func (r *gormOrderRepository) GetTopNOrders(ctx context.Context, limit int) ([]models.Order, error) {
+	var orders []models.Order
+
+	err := r.db.WithContext(ctx).Limit(limit).Order("created_at DESC").Find(&orders).Error
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve top %d orders: %w", limit, err)
+	}
 	return orders, nil
 }

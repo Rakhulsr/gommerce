@@ -94,7 +94,7 @@ type ProductForm struct {
 	Weight          string `form:"weight" validate:"required,numeric,min=0"`
 	CategoryID      string `form:"category_id" validate:"required"`
 	DiscountPercent string `form:"discount_percent" validate:"omitempty,numeric,min=0,max=100"`
-	// ImagePath       string `form:"image_path" validate:"omitempty,url"`
+
 	ExistingImages []models.ProductImage
 }
 
@@ -271,12 +271,14 @@ func (h *AdminHandler) GetDashboard(w http.ResponseWriter, r *http.Request) {
 		data.TotalOrders = totalOrders
 	}
 
-	recentOrders, err := h.orderRepo.GetRecentOrders(ctx, 5)
+	const limitOrders = 5
+	recentOrders, err := h.orderRepo.GetTopNOrders(ctx, limitOrders)
 	if err != nil {
-		log.Printf("GetDashboard: Gagal mengambil pesanan terbaru: %v", err)
+		log.Printf("GetDashboard: Gagal mengambil %d pesanan terbaru: %v", limitOrders, err)
 		data.RecentOrders = []models.Order{}
 	} else {
 		data.RecentOrders = recentOrders
+		log.Printf("GetDashboard: Berhasil mengambil %d pesanan terbaru.", len(recentOrders))
 	}
 
 	products, err := h.productRepo.GetProducts(ctx)

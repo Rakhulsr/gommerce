@@ -40,9 +40,8 @@
             animation: fadeOut 0.5s ease-out forwards;
         }
 
-        /* Styling kustom untuk ikon sukses */
         .text-success-icon {
-            color: #22c55e; /* Warna hijau sesuai Tailwind green-500 */
+            color: #22c55e; 
         }
     </style>
 </head>
@@ -55,7 +54,7 @@
                 </svg>
             </div>
             
-            <h1 class="text-3xl font-extrabold text-gray-900 mb-4">{{ .Title }}</h1>
+            <h1 class="text-3xl font-extrabold text-gray-900 mb-4">Transaksi Berhasil</h1>
             <p class="text-lg text-gray-700 mb-8 leading-relaxed">{{ .Message }}</p>
 
             <div class="mt-6 flex flex-col sm:flex-row justify-center gap-4">
@@ -70,7 +69,7 @@
     </div>
 
     <script>
-        // Logika flash message yang serupa dengan template checkout/process
+        
         document.addEventListener('DOMContentLoaded', function() {
             const flashMessage = document.getElementById('flash-message');
             if (flashMessage) {
@@ -79,7 +78,7 @@
                     flashMessage.addEventListener('animationend', () => {
                         flashMessage.remove();
                     });
-                }, 5000); // Pesan akan hilang setelah 5 detik
+                }, 5000); 
             }
         });
     </script>
