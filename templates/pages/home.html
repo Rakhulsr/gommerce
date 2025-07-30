@@ -48,7 +48,7 @@
                     {{ if gt (len .ProductImages) 0 }}
                     <img src="{{ (index .ProductImages 0).Small }}" alt="{{ .Name }}" class="h-56 w-full object-cover rounded-t-xl" />
                     {{ else }}
-                    <img src="/images/product/ss.jpg" alt="Tidak ada gambar" class="h-56 w-full object-cover rounded-t-xl" />
+                    <img src="static/assets/images/product/ss.jpg" alt="Tidak ada gambar" class="h-56 w-full object-cover rounded-t-xl" />
                     {{ end }}
                     <div class="p-5">
                         <h4 class="text-lg font-semibold text-gray-900 truncate">{{ .Name }}</h4>
