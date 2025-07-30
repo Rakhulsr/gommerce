@@ -2,10 +2,10 @@ document.addEventListener("DOMContentLoaded", function () {
  
   console.log("✅ JS Loaded!");
   
-  // Pastikan elemen 'product-page' ada di DOM
+  
   const productPage = document.getElementById("product-page");
 
-  if (productPage) { // Kondisi ini sekarang akan terpenuhi
+  if (productPage) { 
     const priceElement = document.getElementById("productPrice");
     const quantityInput = document.getElementById("qty");
     const subtotal = document.getElementById("subtotal");
@@ -48,7 +48,7 @@ document.addEventListener("DOMContentLoaded", function () {
       };
 
       quantityInput.addEventListener("input", updateSubtotal);
-      updateSubtotal(); // Panggil sekali saat dimuat untuk inisialisasi subtotal
+      updateSubtotal(); 
     }
   }
 

@@ -1,0 +1,78 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: toko_bulan_app_local
+    ports:
+      - "80:8080" 
+    environment:
+      APP_NAME: ${APP_NAME}
+      APP_ENV: ${APP_ENV}
+      APP_PORT: ${APP_PORT}
+      APP_URL: ${APP_URL} 
+      
+      DB_HOST: mysql 
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+      DB_PORT: ${DB_PORT}
+
+   
+      DATABASE_URL: mysql://${DB_USER}:${DB_PASSWORD}@tcp(${DB_HOST}:${DB_PORT})/${DB_NAME}?parseTime=true
+
+   
+      JWT_SECRET: ${JWT_SECRET}
+      SESSION_KEY: ${SESSION_KEY}
+      CRSFKEY: ${CRSFKEY}
+      APP_AUTH_KEY: ${APP_AUTH_KEY}
+      APP_ENC_KEY: ${APP_ENC_KEY}
+
+   
+      API_ONGKIR_BASE_URL_KOMERCE: ${API_ONGKIR_BASE_URL_KOMERCE}
+      API_ONGKIR_KEY_KOMERCE: ${API_ONGKIR_KEY_KOMERCE}
+      API_ONGKIR_BASE_URL1: ${API_ONGKIR_BASE_URL1}
+      API_ONGKIR_KEY1: ${API_ONGKIR_KEY1}
+      API_ONGKIR_ORIGIN: ${API_ONGKIR_ORIGIN}
+
+      MIDTRANS_MERCHANT_KEY: ${MIDTRANS_MERCHANT_KEY}
+      MIDTRANS_CLIENT_KEY: ${MIDTRANS_CLIENT_KEY}
+      MIDTRANS_SERVER_KEY: ${MIDTRANS_SERVER_KEY}
+
+      EMAIL_HOST: ${EMAIL_HOST}
+      EMAIL_PORT: ${EMAIL_PORT}
+      EMAIL_USERNAME: ${EMAIL_USERNAME}
+      EMAIL_PASSWORD: ${EMAIL_PASSWORD}
+      EMAIL_FROM: ${EMAIL_FROM}
+
+    depends_on:
+     - mysql
+      
+    restart: always
+
+  mysql:
+    image: mysql:8.0
+    container_name: mysql
+    ports:
+      - "3307:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME}
+    volumes:
+      - db_data_local:/var/lib/mysql 
+   
+    
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-P", "3306", "-u", "root", "--password=${DB_PASSWORD}"]
+      interval: 10s       
+      timeout: 5s         
+      retries: 5          
+      start_period: 30s   
+    restart: unless-stopped
+
+
+
+volumes:
+  db_data_local:

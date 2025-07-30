@@ -57,6 +57,6 @@ func NewAdminRenderer() *render.Render {
 		},
 	})
 
-	log.Println("✅ AdminRenderer initialized. Admin templates will use 'layout_admin.html'")
+	log.Println("✅ AdminRenderer initialized.")
 	return r
 }

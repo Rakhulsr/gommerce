@@ -175,7 +175,7 @@ func GetBaseData(r *http.Request, pageSpecificData map[string]interface{}) map[s
 				pageSpecificData["IsAdminPage"] = true
 			}
 		} else {
-			log.Printf("GetBaseData: User in context is not of type *models.User or is nil. Value: %+v", userVal)
+
 			pageSpecificData["User"] = nil
 			pageSpecificData["IsLoggedIn"] = false
 			pageSpecificData["UserID"] = ""

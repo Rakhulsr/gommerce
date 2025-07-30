@@ -164,7 +164,7 @@ func CartCountMiddleware(cartRepo repositories.CartRepositoryImpl) func(http.Han
 
 			cartID, ok := r.Context().Value(helpers.ContextKeyCartID).(string)
 			if !ok || cartID == "" {
-				log.Printf("CartCountMiddleware: CartID NOT found or empty in context for %s. Setting count to 0.", r.URL.Path)
+
 				ctx := context.WithValue(r.Context(), helpers.CartCountKey, 0)
 				next.ServeHTTP(w, r.WithContext(ctx))
 				return

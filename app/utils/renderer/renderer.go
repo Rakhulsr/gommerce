@@ -58,7 +58,7 @@ func New() *render.Render {
 		},
 	})
 
-	log.Println("✅ Renderer initialized. Templates will be loaded from 'assets/views' and its subdirectories.")
+	log.Println("✅ Renderer initialized. ")
 
 	return r
 }

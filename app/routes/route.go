@@ -71,9 +71,9 @@ func NewRouter(db *gorm.DB) *mux.Router {
 	komerceCheckoutHandler := handlers.NewKomerceCheckoutHandler(render, validate, checkoutSvc, cartRepo, userRepo, orderRepo, productRepo, db, komerceShippingSvc, addressRepo, sessionStore, *paymentSvc, cartItemRepo)
 	orderHandler := handlers.NewOrderHandler(render, orderRepo, userRepo, paymentRepo)
 
-	router.PathPrefix("/css/").Handler(http.StripPrefix("/css/", http.FileServer(http.Dir("static/assets/css"))))
-	router.PathPrefix("/js/").Handler(http.StripPrefix("/js/", http.FileServer(http.Dir("static/assets/js"))))
-	router.PathPrefix("/images/").Handler(http.StripPrefix("/images/", http.FileServer(http.Dir("static/assets/images"))))
+	// router.PathPrefix("/css/").Handler(http.StripPrefix("/css/", http.FileServer(http.Dir("static/assets/css"))))
+	// router.PathPrefix("/js/").Handler(http.StripPrefix("/js/", http.FileServer(http.Dir("static/assets/js"))))
+	// router.PathPrefix("/images/").Handler(http.StripPrefix("/images/", http.FileServer(http.Dir("static/assets/images"))))
 
 	staticFileDir := "static"
 	router.PathPrefix("/static/").Handler(http.StripPrefix("/static/", http.FileServer(http.Dir(staticFileDir))))

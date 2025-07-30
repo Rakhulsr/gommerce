@@ -9,6 +9,7 @@ import (
 
 	"github.com/Rakhulsr/go-ecommerce/app/cmd"
 	"github.com/Rakhulsr/go-ecommerce/app/configs"
+	"github.com/Rakhulsr/go-ecommerce/app/models/migrations"
 	"github.com/Rakhulsr/go-ecommerce/app/routes"
 	"github.com/midtrans/midtrans-go"
 	"github.com/midtrans/midtrans-go/snap"
@@ -46,6 +47,10 @@ func main() {
 		log.Fatal("DB connection failed:", err)
 
 	}
+	if err := migrations.AutoMigrate(db); err != nil {
+		log.Fatal("Auto migrate failed:", err)
+	}
+
 	log.Println("✅ Database connected.")
 	log.Println("✅ Session store initialized.")
 	router := routes.NewRouter(db)

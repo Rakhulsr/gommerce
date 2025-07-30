@@ -278,7 +278,6 @@ func (h *AdminHandler) GetDashboard(w http.ResponseWriter, r *http.Request) {
 		data.RecentOrders = []models.Order{}
 	} else {
 		data.RecentOrders = recentOrders
-		log.Printf("GetDashboard: Berhasil mengambil %d pesanan terbaru.", len(recentOrders))
 	}
 
 	products, err := h.productRepo.GetProducts(ctx)
