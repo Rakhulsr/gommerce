@@ -3,6 +3,9 @@
 
 
 Go-Commerce is a robust and scalable e-commerce application built from the ground up using the Go programming language. This project leverages Go's powerful concurrency features and strong typing to deliver a fast, secure, and reliable backend service. It is designed to handle common e-commerce functionalities, providing a solid foundation for any online store.
+Live Demo: You can explore the live application at https://tokobulan.site/.
+
+
 
 ## Key Features
 - Product Management: Comprehensive CRUD (Create, Read, Update, Delete) operations for managing products, including details like price, stock, and descriptions.
